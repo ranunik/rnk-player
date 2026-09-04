@@ -240,7 +240,7 @@
         .volume-wrapper:hover .volume-popup, .volume-wrapper:focus-within .volume-popup { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(5px); }
         .volume-wrapper.force-hide .volume-popup { opacity: 0 !important; visibility: hidden !important; transform: translateX(-50%) translateY(0) !important; }
 
-        .volume-slider { -webkit-appearance: slider-vertical; appearance: slider-vertical; width: 4px; height: 70px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; cursor: pointer; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
+        .volume-slider { writing-mode: vertical-lr; direction: rtl; width: 4px; height: 70px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; cursor: pointer; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
         .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.6); }
 
         .playback-controls { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; width: 100%; position: relative; height: 64px; }
@@ -289,7 +289,7 @@
     <div class="island-content" id="island-content">
         <div class="island-info-group">
             <div class="island-cover-wrapper skeleton" id="cover-wrapper">
-                <img src="" class="island-cover" id="island-cover" alt="Обкладинка альбому" crossorigin="anonymous">
+                <img src="" class="island-cover" id="island-cover" alt="Обкладинка альбому">
             </div>
             <div class="island-visualizer paused" id="island-visualizer" aria-hidden="true">
                 <div class="visualizer-bar"></div><div class="visualizer-bar"></div>
@@ -399,8 +399,6 @@
 
         const deckA = document.createElement('audio'); 
         const deckB = document.createElement('audio'); 
-        deckA.crossOrigin = "anonymous";
-        deckB.crossOrigin = "anonymous";
         deckA.style.display = 'none'; deckB.style.display = 'none';
         document.body.appendChild(deckA);
         document.body.appendChild(deckB);
@@ -692,9 +690,11 @@
             let proxyUrl = coverUrl;
             if (!coverUrl.startsWith('data:') && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('./')) {
                 proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(coverUrl)}&w=150&output=webp`;
+                islandCover.crossOrigin = "anonymous";
+            } else {
+                islandCover.removeAttribute('crossOrigin');
             }
             
-            islandCover.crossOrigin = "anonymous";
             islandCover.src = proxyUrl; 
 
             if (!playlist[currentTrackIndex].video) {
@@ -722,7 +722,13 @@
             
             if(track.audio.startsWith('data:') || track.audio.startsWith('blob:')) return;
 
-            jsmediatags.read(track.audio, {
+            // Відключаємо jsmediatags для локального запуску, щоб не було CORS помилок
+            if (window.location.protocol === 'file:') return;
+
+            // jsmediatags вимагає абсолютний URL
+            const absoluteAudioUrl = new URL(track.audio, window.location.href).href;
+
+            jsmediatags.read(absoluteAudioUrl, {
                 onSuccess: function(tag) {
                     const tags = tag.tags;
                     if (tags.picture) {
