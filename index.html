@@ -36,7 +36,9 @@
             position: absolute; 
             bottom: 10px; 
             left: 50%;
+            /* Додано backface-visibility для кращого GPU рендерингу */
             transform: translateX(-50%) translateZ(0); 
+            backface-visibility: hidden;
             
             background: rgba(15, 15, 15, 0.4);
             backdrop-filter: blur(50px) saturate(220%);
@@ -58,7 +60,8 @@
             isolation: isolate;
             -webkit-mask-image: -webkit-radial-gradient(white, black);
             z-index: 100;
-            will-change: width, height, border-radius;
+            /* Оптимізовано will-change: додано box-shadow */
+            will-change: width, height, border-radius, box-shadow;
         }
 
         .player-container::before {
@@ -141,6 +144,8 @@
 
         .island-visualizer { 
             display: flex; gap: 2.5px; align-items: center; justify-content: center; height: 16px; margin: 0 4px;
+            /* Ізоляція для зменшення перемальовок */
+            contain: content; 
         }
         
         .is-mobile .island-visualizer { display: flex !important; margin-right: auto; }
@@ -149,6 +154,7 @@
             width: 3px; height: 14px; border-radius: 1.5px; background-color: var(--viz-color); 
             transform-origin: center; will-change: transform; transform: scaleY(0.2);
             box-shadow: 0 0 8px var(--viz-color); transition: background-color 0.5s ease, box-shadow 0.5s ease;
+            backface-visibility: hidden;
         }
 
         .island-controls { display: flex; align-items: center; gap: 2px; padding-right: 4px; }
@@ -199,7 +205,6 @@
         .progress-tooltip { position: absolute; top: -20px; left: 0; transform: translateX(-50%); background: rgba(20,20,20,0.8); backdrop-filter: blur(10px); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 6px; border-radius: 6px; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.2s ease, visibility 0.2s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.1); z-index: 20; white-space: nowrap; }
         .progress-area:hover .progress-tooltip, .progress-area:active .progress-tooltip { opacity: 1; visibility: visible; }
         
-        /* 🔥 Додано клас для примусового приховування тултіпу після ручної перемотки 🔥 */
         .progress-area.force-hide-tooltip .progress-tooltip { opacity: 0 !important; visibility: hidden !important; }
         
         .progress-bar-bg { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.15); border-radius: 2.5px; position: relative; pointer-events: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
@@ -412,8 +417,10 @@
         let smoothedIntensity = 0;
         let currentHue = 140;
         let barValues = [0.2, 0.2, 0.2, 0.2];
+        let lastAppliedBars = [0, 0, 0, 0]; // Кеш для DOM записів
+        let isShadowCleared = false; // Кеш стану тіні
+        let lastShadowUpdateTime = 0; // Для тротлінгу тіні
 
-        // 🔥 Змінні для таймера тултіпу прогресу 🔥
         let progressHideTimeout;
 
         const container = document.getElementById('player-container');
@@ -454,7 +461,38 @@
         const shuffleBtn = document.getElementById('shuffle-btn');
         const repeatBtn = document.getElementById('repeat-btn');
 
-        // 🔥 Логіка для приховання тултіпу прогресу 🔥
+        // 🔥 ВИРІШЕННЯ ISSUE 1: Глобальне розблокування медіа-елементів 🔥
+        let isMediaUnlocked = false;
+        function unlockMediaElements() {
+            if (isMediaUnlocked) return;
+            try {
+                // Встановлюємо пустий звук для другої деки, щоб браузер дозволив play()
+                if (!deckB.src) deckB.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+                
+                const playPromiseA = deckA.play();
+                if (playPromiseA !== undefined) {
+                    playPromiseA.then(() => { if (!isPlaying || activeDeck !== deckA) deckA.pause(); }).catch(() => {});
+                }
+                
+                const playPromiseB = deckB.play();
+                if (playPromiseB !== undefined) {
+                    playPromiseB.then(() => { if (!isPlaying || activeDeck !== deckB) deckB.pause(); }).catch(() => {});
+                }
+                
+                const playPromiseVid = bgVideo.play();
+                if (playPromiseVid !== undefined) {
+                    playPromiseVid.then(() => { if (!isPlaying || !playlist[currentTrackIndex].video) bgVideo.pause(); }).catch(() => {});
+                }
+                
+                isMediaUnlocked = true;
+            } catch (e) {
+                console.warn("Media unlocker logic failed", e);
+            }
+        }
+        
+        document.body.addEventListener('click', unlockMediaElements, { once: true, capture: true });
+        document.body.addEventListener('touchstart', unlockMediaElements, { once: true, capture: true, passive: true });
+
         function resetProgressTooltipDelay() {
             clearTimeout(progressHideTimeout);
             progressArea.classList.remove('force-hide-tooltip');
@@ -464,7 +502,7 @@
             clearTimeout(progressHideTimeout);
             progressHideTimeout = setTimeout(() => {
                 progressArea.classList.add('force-hide-tooltip');
-            }, 2000); // 2 секунди — ідеальний комфортний час
+            }, 2000); 
         }
 
         function debounce(func, wait) {
@@ -571,9 +609,15 @@
             let isBarZeroed = barValues.every(v => Math.abs(v - 0.2) < 0.01);
             if (!isPlaying && smoothedIntensity < 0.01 && isBarZeroed && !hasVideo) {
                 smoothedIntensity = 0;
-                container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
+                if (!isShadowCleared) {
+                    container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
+                    isShadowCleared = true;
+                }
                 for (let i = 0; i < 4; i++) {
-                    vizBars[i].style.transform = `scaleY(0.2)`;
+                    if (lastAppliedBars[i] !== 0.2) {
+                        vizBars[i].style.transform = `scaleY(0.2)`;
+                        lastAppliedBars[i] = 0.2;
+                    }
                     barValues[i] = 0.2;
                 }
                 isVisualizerRunning = false;
@@ -581,11 +625,14 @@
             }
 
             requestAnimationFrame(updateAudioVisuals);
+            const now = performance.now();
 
             if (!isPlaying || isCollapsed || hasVideo) {
                 smoothedIntensity = smoothedIntensity * 0.85; 
-                if (smoothedIntensity >= 0.01) {
+                // Тротлінг для тіні
+                if (smoothedIntensity >= 0.01 && (now - lastShadowUpdateTime > 33)) {
                     applyShadow();
+                    lastShadowUpdateTime = now;
                 }
             } else {
                 let bassSum = 0;
@@ -605,13 +652,23 @@
                 let hueVibration = (midAvg * 30);
                 currentHue = (baseTrackHue + hueVibration) % 360;
                 
-                applyShadow();
+                // Тротлінг: оновлюємо тінь лише ~30 разів на секунду, щоб не навантажувати GPU
+                if (now - lastShadowUpdateTime > 33) {
+                    applyShadow();
+                    lastShadowUpdateTime = now;
+                }
             }
 
+            // Розрахунок стовпчиків (залишається на 60fps для плавності)
             if (!isPlaying) {
                 for (let i = 0; i < 4; i++) {
                     barValues[i] = barValues[i] + (0.2 - barValues[i]) * 0.2;
-                    vizBars[i].style.transform = `scaleY(${Math.max(0.2, barValues[i])})`;
+                    // Оптимізація DOM-записів: оновлюємо лише якщо значення змінилось помітно
+                    let roundedVal = Math.round(Math.max(0.2, barValues[i]) * 100) / 100;
+                    if (lastAppliedBars[i] !== roundedVal) {
+                        vizBars[i].style.transform = `scaleY(${roundedVal})`;
+                        lastAppliedBars[i] = roundedVal;
+                    }
                 }
             } else {
                 const getAvg = (start, end) => {
@@ -629,37 +686,64 @@
 
                 for (let i = 0; i < 4; i++) {
                     barValues[i] = barValues[i] + (targets[i] - barValues[i]) * 0.3; 
-                    const finalVal = Math.max(0.2, Math.min(1.0, barValues[i]));
-                    vizBars[i].style.transform = `scaleY(${finalVal})`;
+                    let finalVal = Math.max(0.2, Math.min(1.0, barValues[i]));
+                    finalVal = Math.round(finalVal * 100) / 100; // Округлюємо для уникнення зайвих перемальовок браузером
+                    
+                    if (lastAppliedBars[i] !== finalVal) {
+                        vizBars[i].style.transform = `scaleY(${finalVal})`;
+                        lastAppliedBars[i] = finalVal;
+                    }
                 }
             }
 
             function applyShadow() {
-                if (smoothedIntensity === 0) return;
+                if (smoothedIntensity < 0.01) {
+                    if (!isShadowCleared) {
+                        container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
+                        isShadowCleared = true;
+                    }
+                    return;
+                }
+                
+                isShadowCleared = false;
                 
                 let hue1 = Math.floor(currentHue); 
                 let hue2 = Math.floor((baseTrackHue + 35) % 360); 
                 let hue3 = Math.floor((baseTrackHue + 180) % 360); 
 
-                let sat = Math.min(100, 60 + smoothedIntensity * 40); 
-                let lit = Math.min(60, 40 + smoothedIntensity * 20);  
+                let sat = Math.floor(Math.min(100, 60 + smoothedIntensity * 40)); 
+                let lit = Math.floor(Math.min(60, 40 + smoothedIntensity * 20));  
 
+                // Попередньо вираховуємо розміри, щоб не навантажувати браузер математикою в рядку
                 const alpha1 = (smoothedIntensity * 0.85).toFixed(2);
                 const alpha2 = (smoothedIntensity * 0.55).toFixed(2);
                 const alpha3 = (smoothedIntensity * 0.35).toFixed(2);
+                const alpha4 = (smoothedIntensity * 0.5).toFixed(2);
+
+                const s1X = Math.round(15 + smoothedIntensity * 20);
+                const s1B = Math.round(30 + smoothedIntensity * 25);
+                
+                const s2X = Math.round(35 + smoothedIntensity * 35);
+                const s2B = Math.round(60 + smoothedIntensity * 40);
+                
+                const s3X = Math.round(55 + smoothedIntensity * 45);
+                const s3B = Math.round(90 + smoothedIntensity * 50);
+                
+                const sInX = Math.round(15 + smoothedIntensity * 15);
+                const sInB = Math.round(25 + smoothedIntensity * 15);
 
                 const shadow = `
-                    -${15 + smoothedIntensity * 20}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
-                     ${15 + smoothedIntensity * 20}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
+                    -${s1X}px 0 ${s1B}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
+                     ${s1X}px 0 ${s1B}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
                      
-                    -${35 + smoothedIntensity * 35}px 0 ${60 + smoothedIntensity * 40}px -15px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2}),
-                     ${35 + smoothedIntensity * 35}px 0 ${60 + smoothedIntensity * 40}px -15px hsla(${hue3}, 90%, 55%, ${alpha2}),
+                    -${s2X}px 0 ${s2B}px -15px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2}),
+                     ${s2X}px 0 ${s2B}px -15px hsla(${hue3}, 90%, 55%, ${alpha2}),
                      
-                    -${55 + smoothedIntensity * 45}px 0 ${90 + smoothedIntensity * 50}px -20px hsla(${hue2}, 80%, 45%, ${alpha3}),
-                     ${55 + smoothedIntensity * 45}px 0 ${90 + smoothedIntensity * 50}px -20px hsla(${hue3}, 80%, 45%, ${alpha3}),
+                    -${s3X}px 0 ${s3B}px -20px hsla(${hue2}, 80%, 45%, ${alpha3}),
+                     ${s3X}px 0 ${s3B}px -20px hsla(${hue3}, 80%, 45%, ${alpha3}),
                      
-                    inset -${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.5}),
-                    inset  ${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.5})
+                    inset -${sInX}px 0 ${sInB}px -10px hsla(${hue1}, 100%, 60%, ${alpha4}),
+                    inset  ${sInX}px 0 ${sInB}px -10px hsla(${hue1}, 100%, 60%, ${alpha4})
                 `;
                 container.style.setProperty('--dynamic-shadow', shadow);
             }
@@ -672,8 +756,44 @@
             navigator.mediaSession.setActionHandler('nexttrack', () => manualSwitch('next'));
         }
 
+        // 🔥 ДОДАНО: Обробка свайпів в Dynamic Island (для мобільних) 🔥
+        let islandTouchStartX = 0;
+        let islandTouchEndX = 0;
+        let isIslandSwiping = false;
+
+        islandContent.addEventListener('touchstart', (e) => {
+            if (!container.classList.contains('collapsed')) return;
+            islandTouchStartX = e.changedTouches[0].screenX;
+            isIslandSwiping = false;
+        }, { passive: true });
+
+        islandContent.addEventListener('touchmove', (e) => {
+            if (!container.classList.contains('collapsed')) return;
+            islandTouchEndX = e.changedTouches[0].screenX;
+            if (Math.abs(islandTouchEndX - islandTouchStartX) > 15) {
+                isIslandSwiping = true; 
+            }
+        }, { passive: true });
+
+        islandContent.addEventListener('touchend', (e) => {
+            if (!container.classList.contains('collapsed')) return;
+            islandTouchEndX = e.changedTouches[0].screenX;
+            
+            let swipeDistance = islandTouchStartX - islandTouchEndX;
+            
+            if (Math.abs(swipeDistance) > 40) { 
+                if (swipeDistance > 0) {
+                    manualSwitch('next');
+                } else {
+                    manualSwitch('prev');
+                }
+            }
+            
+            setTimeout(() => { isIslandSwiping = false; }, 50);
+        });
+
         islandContent.addEventListener('click', (e) => {
-            if(e.target.closest('.island-btn')) return;
+            if(e.target.closest('.island-btn') || isIslandSwiping) return;
             haptics.expand(); 
             container.classList.remove('collapsed');
             container.classList.add('expanded');
@@ -824,18 +944,20 @@
                 readMetadata(track);
                 if (track.video) {
                     bgVideo.src = track.video;
+                    bgVideo.load(); 
                     bgVideo.play().catch(() => {});
                 }
             }
 
             if (autoPlay) { 
                 deck.volume = userVolume;
-                deck.play(); 
+                deck.play().catch(() => {}); 
             }
         }
 
         function togglePlay() {
             initRealAudioVisualizer(); 
+            unlockMediaElements(); 
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 
             if (isPlaying) { 
@@ -844,9 +966,9 @@
                 if (isAutomixing) nextDeck.pause(); 
             } else { 
                 haptics.play(); 
-                activeDeck.play(); 
-                if (isAutomixing) nextDeck.play(); 
-                if (playlist[currentTrackIndex].video) bgVideo.play(); 
+                activeDeck.play().catch(() => {}); 
+                if (isAutomixing) nextDeck.play().catch(() => {}); 
+                if (playlist[currentTrackIndex].video) bgVideo.play().catch(() => {}); 
             }
         }
 
@@ -909,7 +1031,8 @@
                 readMetadata(playlist[currentTrackIndex]); 
                 if (playlist[currentTrackIndex].video) {
                     bgVideo.src = playlist[currentTrackIndex].video;
-                    bgVideo.play().catch(() => {});
+                    bgVideo.load();
+                    bgVideo.play().catch(() => {}); 
                 }
 
                 const startTime = Date.now();
@@ -1076,6 +1199,7 @@
                     requestAnimationFrame(() => {
                         if (deck === activeDeck && !isDraggingProgress) {
                             const percent = (deck.currentTime / deck.duration) * 100;
+                            // Оптимізація запису ширини:
                             progressBar.style.width = `${percent}%`;
                             progressArea.setAttribute('aria-valuenow', percent.toFixed(0));
                             currTimeEl.textContent = formatTime(deck.currentTime);
@@ -1139,14 +1263,14 @@
             isDraggingProgress = true;
             haptics.lightTap(); 
             updateProgressUI(e.clientX);
-            resetProgressTooltipDelay(); // Скидаємо таймер приховання при новому кліку
+            resetProgressTooltipDelay(); 
         });
 
         progressArea.addEventListener('touchstart', (e) => {
             isDraggingProgress = true;
             haptics.lightTap(); 
             updateProgressUI(e.touches[0].clientX);
-            resetProgressTooltipDelay(); // Скидаємо таймер приховання при новому дотику
+            resetProgressTooltipDelay(); 
         }, { passive: true });
 
         let isDragUpdatePending = false;
@@ -1182,6 +1306,9 @@
         const endDrag = () => {
             if (isDraggingProgress) {
                 isDraggingProgress = false;
+                
+                unlockMediaElements(); 
+                
                 if (activeDeck.duration) activeDeck.currentTime = dragPercent * activeDeck.duration;
                 
                 if (isAutomixing) {
@@ -1193,7 +1320,6 @@
                     resetDeckDJState(nextDeck);
                 }
                 
-                // 🔥 Запускаємо таймер зникнення тултіпу після ручної перемотки 🔥
                 startProgressTooltipHideDelay();
             }
         };
@@ -1204,7 +1330,7 @@
         let isProgressTooltipUpdating = false;
 
         progressArea.addEventListener('mousemove', (e) => {
-            resetProgressTooltipDelay(); // Знову відображаємо, якщо миша рухається
+            resetProgressTooltipDelay();
             
             if (!activeDeck.duration || isDraggingProgress) return;
             
@@ -1224,7 +1350,6 @@
             }
         }, { passive: true });
 
-        // 🔥 Скидаємо примусове приховування, якщо миша покинула елемент (працюватиме стандартний hover) 🔥
         progressArea.addEventListener('mouseleave', () => {
             resetProgressTooltipDelay();
         });
