@@ -396,12 +396,23 @@
         let isShuffle = false;
         let isRepeat = false;
 
+        // 🛡 Смарт-генератор абсолютних шляхів для GitHub Pages
+        const getAbsoluteUrl = (url) => {
+            if (!url) return '';
+            if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url;
+            
+            let loc = window.location.href;
+            // Якщо адреса не закінчується на слеш або не містить файл (.html), додаємо слеш.
+            // Це рятує від 404 помилок на GitHub Pages при використанні відносних шляхів.
+            if (!loc.endsWith('/') && !loc.split('/').pop().includes('.')) {
+                loc += '/';
+            }
+            return new URL(url, loc).href;
+        };
+
         const deckA = document.createElement('audio'); 
         const deckB = document.createElement('audio'); 
         deckA.style.display = 'none'; deckB.style.display = 'none';
-        
-        // ВАЖЛИВО: Оскільки файли лежать на тому ж домені (GitHub Pages),
-        // ми ПРИБИРАЄМО crossOrigin="anonymous", щоб не провокувати CORS блокування
         
         document.body.appendChild(deckA);
         document.body.appendChild(deckB);
@@ -418,7 +429,7 @@
         let isDraggingProgress = false;
         let dragPercent = 0;
 
-        // 🔥 Web Audio API: Чесний аналізатор частот 🔥
+        // 🔥 Web Audio API
         let audioCtx, analyser, dataArray;
         let audioInitialized = false;
         let baseTrackHue = 140; 
@@ -462,6 +473,18 @@
         const shuffleBtn = document.getElementById('shuffle-btn');
         const repeatBtn = document.getElementById('repeat-btn');
 
+        // 🚨 Детальне логування помилок аудіо
+        [deckA, deckB].forEach(deck => {
+            deck.addEventListener('error', () => {
+                if (deck.error) {
+                    console.error(`Media Error [Код ${deck.error.code}] для:`, deck.src);
+                    if (deck.error.code === 4) {
+                        console.warn("Файл повернув 404 або формат не підтримується! Переконайся, що шлях правильний і ти НЕ використовуєш Git LFS для MP3 файлів.");
+                    }
+                }
+            });
+        });
+
         let progressWidth = 0;
         function cacheDimensions() {
             if (!container.classList.contains('collapsed')) progressWidth = progressArea.clientWidth;
@@ -482,7 +505,7 @@
         }
         setInitialLayout();
 
-        // 🛡 Універсальна захисна функція для будь-яких помилок відтворення (включаючи синхронні)
+        // 🛡 Універсальна захисна функція
         const safePlay = (mediaEl) => {
             if (!mediaEl || !mediaEl.src) return;
             try {
@@ -497,7 +520,6 @@
             }
         };
 
-        // Ініціалізація аудіоконтексту ПІСЛЯ кліку користувача
         function initRealAudioVisualizer() {
             if (audioInitialized) return;
             try {
@@ -521,7 +543,6 @@
             }
         }
 
-        // 🔥 Чесний аналізатор + DMX логіка з боковим світінням 🔥
         function updateBeatGlow() {
             requestAnimationFrame(updateBeatGlow);
 
@@ -695,7 +716,7 @@
 
             let proxyUrl = coverUrl;
             if (!coverUrl.startsWith('data:') && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('./')) {
-                proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(coverUrl)}&w=150&output=webp`;
+                proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(getAbsoluteUrl(coverUrl))}&w=150&output=webp`;
                 islandCover.crossOrigin = "anonymous";
             } else {
                 islandCover.removeAttribute('crossOrigin');
@@ -703,13 +724,11 @@
             
             islandCover.src = proxyUrl; 
 
-            // Грейсфул управління відео фоном
             if (!playlist[currentTrackIndex].video) {
                 bgVideo.style.display = 'none';
                 bgPoster.style.display = 'block';
-                bgPoster.style.backgroundImage = `url(${coverUrl})`; 
+                bgPoster.style.backgroundImage = `url(${getAbsoluteUrl(coverUrl)})`; 
                 
-                // Зупиняємо відео і повністю видаляємо джерело
                 bgVideo.pause();
                 bgVideo.removeAttribute('src');
                 bgVideo.load(); 
@@ -722,8 +741,8 @@
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: title, artist: artist, album: 'RNK-SYNC',
                     artwork: [
-                        { src: directCoverLink || coverUrl, sizes: '96x96', type: 'image/jpeg' },
-                        { src: directCoverLink || coverUrl, sizes: '512x512', type: 'image/jpeg' }
+                        { src: directCoverLink ? getAbsoluteUrl(directCoverLink) : getAbsoluteUrl(coverUrl), sizes: '96x96', type: 'image/jpeg' },
+                        { src: directCoverLink ? getAbsoluteUrl(directCoverLink) : getAbsoluteUrl(coverUrl), sizes: '512x512', type: 'image/jpeg' }
                     ]
                 });
             }
@@ -735,7 +754,7 @@
             if(track.audio.startsWith('data:') || track.audio.startsWith('blob:')) return;
             if (window.location.protocol === 'file:') return;
 
-            const absoluteAudioUrl = new URL(track.audio, window.location.href).href;
+            const absoluteAudioUrl = getAbsoluteUrl(track.audio);
 
             jsmediatags.read(absoluteAudioUrl, {
                 onSuccess: function(tag) {
@@ -760,13 +779,13 @@
 
         function loadToDeck(deck, index, autoPlay = false) {
             const track = playlist[index];
-            deck.src = track.audio;
+            deck.src = getAbsoluteUrl(track.audio);
             deck.load();
             
             if (deck === activeDeck) {
                 readMetadata(track);
                 if (track.video) {
-                    bgVideo.src = track.video;
+                    bgVideo.src = getAbsoluteUrl(track.video);
                     bgVideo.load();
                     if (autoPlay) {
                         safePlay(bgVideo);
@@ -792,7 +811,6 @@
                 if(playlist[currentTrackIndex].video) bgVideo.pause();
             } else { 
                 haptics.play(); 
-                // Тепер використовуємо safePlay, що блокує будь-які помилки в консолі
                 safePlay(activeDeck); 
                 if(playlist[currentTrackIndex].video) {
                     safePlay(bgVideo);
