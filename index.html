@@ -365,7 +365,6 @@
 
         const defaultCover = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjI1NiIgZmlsbD0iIzExMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjE4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjIyIiBzdHJva2Utd2lkdGg9IjEwIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxMjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzIyMiIgc3Ryb2tlLXdpZHRoPSIxMCIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjgwIiBmaWxsPSIjRkY1NzIyIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMCIgZmlsbD0iIzExMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjgiIGZpbGw9IiNGRkYiLz48L3N2Zz4=";
 
-        // 🔥 ШЛЯХИ ТЕПЕР ЛОКАЛЬНІ (з папок на GitHub) 🔥
         const playlist = [
             { title: "ВАВИЛОН", artist: "YARMAK", audio: "./audio/01.mp3", video: "", cover: "./covers/01.jpg" },
             { title: "Не мовчи", artist: "БЕЗ ОБМЕЖЕНЬ", audio: "./audio/02.mp3", video: "", cover: "./covers/02.jpg" },
@@ -400,6 +399,13 @@
         const deckA = document.createElement('audio'); 
         const deckB = document.createElement('audio'); 
         deckA.style.display = 'none'; deckB.style.display = 'none';
+        
+        // Гарантія правильної роботи Web Audio API для онлайн середовища
+        if (window.location.protocol !== 'file:') {
+            deckA.crossOrigin = "anonymous";
+            deckB.crossOrigin = "anonymous";
+        }
+        
         document.body.appendChild(deckA);
         document.body.appendChild(deckB);
         
@@ -479,7 +485,7 @@
         }
         setInitialLayout();
 
-        // Ініціалізація аудіоконтексту ПІСЛЯ кліку користувача (вимога браузерів)
+        // Ініціалізація аудіоконтексту ПІСЛЯ кліку користувача
         function initRealAudioVisualizer() {
             if (audioInitialized) return;
             try {
@@ -510,7 +516,6 @@
             const trackData = playlist[currentTrackIndex];
             const hasVideo = trackData && trackData.video !== "";
 
-            // Вимикаємо при згортанні або якщо є відео
             if (!isPlaying || container.classList.contains('collapsed') || hasVideo || !audioCtx) {
                 smoothedIntensity = smoothedIntensity * 0.85; 
                 if (smoothedIntensity < 0.01) {
@@ -519,34 +524,24 @@
                     return;
                 }
             } else {
-                // Читаємо реальні дані з треку
                 analyser.getByteFrequencyData(dataArray);
 
-                // 1. Аналіз Басу (Kick/Bass) - низькі частоти для сили пульсації
                 let bassSum = 0;
                 for (let i = 1; i < 6; i++) bassSum += dataArray[i];
                 let bassAvg = (bassSum / 5) / 255;
 
-                // 2. Аналіз Середніх частот (Vocals/Mids) - для швидкості переливання кольору
                 let midSum = 0;
                 for (let i = 20; i < 80; i++) midSum += dataArray[i];
                 let midAvg = (midSum / 60) / 255;
 
-                // Експонента: щоб легкий бас ігнорувався, а глибокий удар "спалахував"
                 let kick = Math.pow(bassAvg, 2.5);
-
-                // Інтенсивність НЕ залежить від userVolume
                 let intensity = kick * 1.5;
                 if (intensity > 1.0) intensity = 1.0;
 
-                // Згладжування (Lerp) для ефекту плавного згасання LED лампи
                 smoothedIntensity = smoothedIntensity * 0.6 + intensity * 0.4;
-                
-                // Колір переливається швидше під час вокалу/соло
                 currentHue = (currentHue + 0.4 + (midAvg * 3.0)) % 360;
             }
 
-            // Колірна палітра відштовхується від базового кольору обкладинки
             let hue1 = Math.floor(currentHue);
             let hue2 = Math.floor((currentHue + 45) % 360);
             let hue3 = Math.floor((currentHue + 90) % 360);
@@ -555,7 +550,6 @@
             const alpha2 = (smoothedIntensity * 0.5).toFixed(2);
             const alpha3 = (smoothedIntensity * 0.2).toFixed(2);
 
-            // 🔥 Світіння суворо ЛИШЕ з правого та лівого боку (від'ємний spread) 🔥
             const shadow = `
                 -${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
                  ${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
@@ -697,10 +691,16 @@
             
             islandCover.src = proxyUrl; 
 
+            // Грейсфул управління відео фоном
             if (!playlist[currentTrackIndex].video) {
                 bgVideo.style.display = 'none';
                 bgPoster.style.display = 'block';
                 bgPoster.style.backgroundImage = `url(${coverUrl})`; 
+                
+                // Зупиняємо відео і повністю видаляємо джерело
+                bgVideo.pause();
+                bgVideo.removeAttribute('src');
+                bgVideo.load(); 
             } else {
                 bgVideo.style.display = 'block';
                 bgPoster.style.display = 'none';
@@ -721,11 +721,8 @@
             updateUI(track.title, track.artist, track.cover, track.cover);
             
             if(track.audio.startsWith('data:') || track.audio.startsWith('blob:')) return;
-
-            // Відключаємо jsmediatags для локального запуску, щоб не було CORS помилок
             if (window.location.protocol === 'file:') return;
 
-            // jsmediatags вимагає абсолютний URL
             const absoluteAudioUrl = new URL(track.audio, window.location.href).href;
 
             jsmediatags.read(absoluteAudioUrl, {
@@ -758,13 +755,16 @@
                 readMetadata(track);
                 if (track.video) {
                     bgVideo.src = track.video;
-                    bgVideo.play().catch(() => {});
+                    bgVideo.load();
+                    if (autoPlay) {
+                        bgVideo.play().catch(e => console.warn('Video blocked:', e));
+                    }
                 }
             }
 
             if (autoPlay) { 
                 deck.volume = userVolume;
-                deck.play(); 
+                deck.play().catch(err => console.warn("AutoPlay blocked or media error:", err));
             }
         }
 
@@ -775,10 +775,14 @@
             if (isPlaying) { 
                 haptics.pause(); 
                 activeDeck.pause(); 
+                if(playlist[currentTrackIndex].video) bgVideo.pause();
             } else { 
                 haptics.play(); 
-                activeDeck.play(); 
-                if(playlist[currentTrackIndex].video) bgVideo.play(); 
+                // Захищаємось від помилки NotSupportedError при старті
+                activeDeck.play().catch(e => console.warn("Audio play error:", e)); 
+                if(playlist[currentTrackIndex].video) {
+                    bgVideo.play().catch(e => console.warn("Video play error:", e));
+                }
             }
         }
 
@@ -835,6 +839,7 @@
                 
             }).catch(e => {
                 isAutomixing = false;
+                console.warn("Automix transition blocked:", e);
             });
         }
 
@@ -906,8 +911,12 @@
 
             deck.addEventListener('ended', () => {
                 if (deck === activeDeck) {
-                    if (isRepeat) { activeDeck.currentTime = 0; activeDeck.play(); }
-                    else { manualSwitch('next'); }
+                    if (isRepeat) { 
+                        activeDeck.currentTime = 0; 
+                        activeDeck.play().catch(e => console.warn("Repeat play blocked:", e)); 
+                    } else { 
+                        manualSwitch('next'); 
+                    }
                 }
             });
 
