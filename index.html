@@ -196,8 +196,12 @@
         .is-mobile .track-artist { font-size: 10px; }
         
         .progress-area { width: 100%; display: flex; flex-direction: column; gap: 6px; cursor: pointer; position: relative; padding: 5px 0; touch-action: none; }
-        .progress-tooltip { position: absolute; top: -20px; left: 0; transform: translateX(-50%); background: rgba(20,20,20,0.8); backdrop-filter: blur(10px); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 6px; border-radius: 6px; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.2s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.1); z-index: 20; white-space: nowrap; }
+        .progress-tooltip { position: absolute; top: -20px; left: 0; transform: translateX(-50%); background: rgba(20,20,20,0.8); backdrop-filter: blur(10px); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 6px; border-radius: 6px; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.2s ease, visibility 0.2s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.1); z-index: 20; white-space: nowrap; }
         .progress-area:hover .progress-tooltip, .progress-area:active .progress-tooltip { opacity: 1; visibility: visible; }
+        
+        /* 🔥 Додано клас для примусового приховування тултіпу після ручної перемотки 🔥 */
+        .progress-area.force-hide-tooltip .progress-tooltip { opacity: 0 !important; visibility: hidden !important; }
+        
         .progress-bar-bg { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.15); border-radius: 2.5px; position: relative; pointer-events: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
         .progress-bar-fill { height: 100%; width: 0%; background: var(--viz-color); border-radius: 2.5px; transition: background-color 0.5s ease; position: relative; pointer-events: none; will-change: width; box-shadow: 0 0 10px var(--viz-color); }
         .progress-area:hover .progress-bar-fill::after, .progress-area:active .progress-bar-fill::after { content: ''; position: absolute; right: -4px; top: -3.5px; width: 12px; height: 12px; background: #fff; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.6); pointer-events: none; }
@@ -409,6 +413,9 @@
         let currentHue = 140;
         let barValues = [0.2, 0.2, 0.2, 0.2];
 
+        // 🔥 Змінні для таймера тултіпу прогресу 🔥
+        let progressHideTimeout;
+
         const container = document.getElementById('player-container');
         const expandedContent = document.getElementById('expanded-content');
         const collapseBtn = document.getElementById('collapse-btn');
@@ -447,7 +454,19 @@
         const shuffleBtn = document.getElementById('shuffle-btn');
         const repeatBtn = document.getElementById('repeat-btn');
 
-        // 🔥 Функція Debounce для оптимізації частих подій 🔥
+        // 🔥 Логіка для приховання тултіпу прогресу 🔥
+        function resetProgressTooltipDelay() {
+            clearTimeout(progressHideTimeout);
+            progressArea.classList.remove('force-hide-tooltip');
+        }
+
+        function startProgressTooltipHideDelay() {
+            clearTimeout(progressHideTimeout);
+            progressHideTimeout = setTimeout(() => {
+                progressArea.classList.add('force-hide-tooltip');
+            }, 2000); // 2 секунди — ідеальний комфортний час
+        }
+
         function debounce(func, wait) {
             let timeout;
             return function() {
@@ -477,7 +496,6 @@
         }
         setInitialLayout();
 
-        // 🔥 Ініціалізація аудіоконтексту та DJ Фільтрів 🔥
         function initRealAudioVisualizer() {
             if (audioInitialized) return;
             try {
@@ -519,7 +537,6 @@
         document.body.addEventListener('click', initRealAudioVisualizer, { once: true });
         document.body.addEventListener('touchstart', initRealAudioVisualizer, { once: true, passive: true });
 
-        // 🔥 Функція чистого скидання ефектів після зведення 🔥
         function resetDeckDJState(deck) {
             if (audioCtx && deck.djFilter) {
                 deck.djFilter.type = "lowshelf";
@@ -530,7 +547,6 @@
             deck.playbackRate = 1.0;
         }
 
-        // 🔥 Оптимізований запуск візуалізатора 🔥
         function startVisualizer() {
             if (!isVisualizerRunning) {
                 isVisualizerRunning = true;
@@ -585,7 +601,9 @@
                 if (intensity > 1.0) intensity = 1.0;
 
                 smoothedIntensity = smoothedIntensity * 0.6 + intensity * 0.4;
-                currentHue = (currentHue + 0.4 + (midAvg * 3.0)) % 360;
+                
+                let hueVibration = (midAvg * 30);
+                currentHue = (baseTrackHue + hueVibration) % 360;
                 
                 applyShadow();
             }
@@ -618,26 +636,30 @@
 
             function applyShadow() {
                 if (smoothedIntensity === 0) return;
-                let hue1 = Math.floor(currentHue);
-                let hue2 = Math.floor((currentHue + 45) % 360);
-                let hue3 = Math.floor((currentHue + 90) % 360);
+                
+                let hue1 = Math.floor(currentHue); 
+                let hue2 = Math.floor((baseTrackHue + 35) % 360); 
+                let hue3 = Math.floor((baseTrackHue + 180) % 360); 
 
-                const alpha1 = (smoothedIntensity * 0.8).toFixed(2);
-                const alpha2 = (smoothedIntensity * 0.5).toFixed(2);
-                const alpha3 = (smoothedIntensity * 0.2).toFixed(2);
+                let sat = Math.min(100, 60 + smoothedIntensity * 40); 
+                let lit = Math.min(60, 40 + smoothedIntensity * 20);  
+
+                const alpha1 = (smoothedIntensity * 0.85).toFixed(2);
+                const alpha2 = (smoothedIntensity * 0.55).toFixed(2);
+                const alpha3 = (smoothedIntensity * 0.35).toFixed(2);
 
                 const shadow = `
-                    -${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
-                     ${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
+                    -${15 + smoothedIntensity * 20}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
+                     ${15 + smoothedIntensity * 20}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
                      
-                    -${30 + smoothedIntensity * 40}px 0 ${50 + smoothedIntensity * 40}px -15px hsla(${hue2}, 100%, 50%, ${alpha2}),
-                     ${30 + smoothedIntensity * 40}px 0 ${50 + smoothedIntensity * 40}px -15px hsla(${hue2}, 100%, 50%, ${alpha2}),
+                    -${35 + smoothedIntensity * 35}px 0 ${60 + smoothedIntensity * 40}px -15px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2}),
+                     ${35 + smoothedIntensity * 35}px 0 ${60 + smoothedIntensity * 40}px -15px hsla(${hue3}, 90%, 55%, ${alpha2}),
                      
-                    -${50 + smoothedIntensity * 50}px 0 ${80 + smoothedIntensity * 50}px -20px hsla(${hue3}, 100%, 50%, ${alpha3}),
-                     ${50 + smoothedIntensity * 50}px 0 ${80 + smoothedIntensity * 50}px -20px hsla(${hue3}, 100%, 50%, ${alpha3}),
+                    -${55 + smoothedIntensity * 45}px 0 ${90 + smoothedIntensity * 50}px -20px hsla(${hue2}, 80%, 45%, ${alpha3}),
+                     ${55 + smoothedIntensity * 45}px 0 ${90 + smoothedIntensity * 50}px -20px hsla(${hue3}, 80%, 45%, ${alpha3}),
                      
-                    inset -${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.4}),
-                    inset  ${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.4})
+                    inset -${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.5}),
+                    inset  ${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.5})
                 `;
                 container.style.setProperty('--dynamic-shadow', shadow);
             }
@@ -852,8 +874,6 @@
             isNextTrackPreloaded = true;
         }
 
-        // 🔥 ДИНАМІЧНЕ ІНТЕЛЕКТУАЛЬНЕ ЗВЕДЕННЯ DJ AUTOMIX 🔥
-        // Тепер функція приймає розраховану тривалість кроссфейду
         function triggerAutomix(crossfadeSec) {
             if (isAutomixing || isRepeat) return; 
             isAutomixing = true;
@@ -882,7 +902,6 @@
                 const fadingOutDeck = activeDeck;
                 const fadingInDeck = nextDeck;
 
-                // РАННІЙ SWAP UI
                 activeDeck = fadingInDeck;
                 nextDeck = fadingOutDeck; 
                 currentTrackIndex = nextIndex;
@@ -1030,24 +1049,19 @@
                 
                 const timeLeft = deck.duration - deck.currentTime;
 
-                // Прелоад заздалегідь перед потенційним довгим міксом
                 if (timeLeft <= 20) preloadNextTrack();
 
-                // 🔥 Розумне визначення моменту міксу 🔥
                 if (timeLeft <= 15 && !isAutomixing && isPlaying && !isRepeat && deck.duration > 20) {
                     let shouldMixNow = false;
                     let plannedDuration = 6;
 
                     if (smoothedIntensity < 0.15 && timeLeft <= 12) {
-                        // Яма або затухання (Outro) - довгий плавний мікс
                         shouldMixNow = true;
                         plannedDuration = timeLeft;
                     } else if (smoothedIntensity >= 0.15 && smoothedIntensity < 0.6 && timeLeft <= 7) {
-                        // Середня енергія - стандартний перехід
                         shouldMixNow = true;
                         plannedDuration = timeLeft;
                     } else if (smoothedIntensity >= 0.6 && timeLeft <= 4) {
-                        // Висока енергія, жорсткий фінал - швидкий зріз
                         shouldMixNow = true;
                         plannedDuration = Math.min(timeLeft, 4); 
                     }
@@ -1123,12 +1137,16 @@
 
         progressArea.addEventListener('mousedown', (e) => {
             isDraggingProgress = true;
-            haptics.lightTap(); updateProgressUI(e.clientX);
+            haptics.lightTap(); 
+            updateProgressUI(e.clientX);
+            resetProgressTooltipDelay(); // Скидаємо таймер приховання при новому кліку
         });
 
         progressArea.addEventListener('touchstart', (e) => {
             isDraggingProgress = true;
-            haptics.lightTap(); updateProgressUI(e.touches[0].clientX);
+            haptics.lightTap(); 
+            updateProgressUI(e.touches[0].clientX);
+            resetProgressTooltipDelay(); // Скидаємо таймер приховання при новому дотику
         }, { passive: true });
 
         let isDragUpdatePending = false;
@@ -1174,6 +1192,9 @@
                     resetDeckDJState(activeDeck);
                     resetDeckDJState(nextDeck);
                 }
+                
+                // 🔥 Запускаємо таймер зникнення тултіпу після ручної перемотки 🔥
+                startProgressTooltipHideDelay();
             }
         };
 
@@ -1183,6 +1204,8 @@
         let isProgressTooltipUpdating = false;
 
         progressArea.addEventListener('mousemove', (e) => {
+            resetProgressTooltipDelay(); // Знову відображаємо, якщо миша рухається
+            
             if (!activeDeck.duration || isDraggingProgress) return;
             
             if (!isProgressTooltipUpdating) {
@@ -1200,6 +1223,11 @@
                 });
             }
         }, { passive: true });
+
+        // 🔥 Скидаємо примусове приховування, якщо миша покинула елемент (працюватиме стандартний hover) 🔥
+        progressArea.addEventListener('mouseleave', () => {
+            resetProgressTooltipDelay();
+        });
 
         mainPlayBtn.addEventListener('click', togglePlay);
         islandPlayBtn.addEventListener('click', togglePlay);
