@@ -379,6 +379,8 @@
         let userVolume = 1.0;
         let isShuffle = false;
         let isRepeat = false;
+        let isNextTrackPreloaded = false;
+        let errorCount = 0;
 
         const deckA = document.createElement('audio'); 
         const deckB = document.createElement('audio'); 
@@ -401,6 +403,8 @@
 
         let audioCtx, analyser, dataArray;
         let audioInitialized = false;
+        let isVisualizerRunning = false;
+        
         let baseTrackHue = 140; 
         let smoothedIntensity = 0;
         let currentHue = 140;
@@ -444,11 +448,21 @@
         const shuffleBtn = document.getElementById('shuffle-btn');
         const repeatBtn = document.getElementById('repeat-btn');
 
+        // 🔥 Функція Debounce для оптимізації частих подій 🔥
+        function debounce(func, wait) {
+            let timeout;
+            return function() {
+                const context = this, args = arguments;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), wait);
+            };
+        }
+
         let progressWidth = 0;
         function cacheDimensions() {
             if (!container.classList.contains('collapsed')) progressWidth = progressArea.clientWidth;
         }
-        window.addEventListener('resize', cacheDimensions, { passive: true });
+        window.addEventListener('resize', debounce(cacheDimensions, 150), { passive: true });
 
         function setInitialLayout() {
             const isMobile = /Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -495,11 +509,18 @@
                 analyser.connect(audioCtx.destination);
                 
                 audioInitialized = true;
-                updateAudioVisuals(); 
+                
+                // Знімаємо слухачі, щоб не викликати повторно
+                document.body.removeEventListener('click', initRealAudioVisualizer);
+                document.body.removeEventListener('touchstart', initRealAudioVisualizer);
             } catch (e) {
                 console.warn("Web Audio API failed to initialize:", e);
             }
         }
+        
+        // Гарантована ініціалізація AudioContext при першій взаємодії
+        document.body.addEventListener('click', initRealAudioVisualizer, { once: true });
+        document.body.addEventListener('touchstart', initRealAudioVisualizer, { once: true, passive: true });
 
         // 🔥 Функція чистого скидання ефектів після зведення 🔥
         function resetDeckDJState(deck) {
@@ -512,10 +533,19 @@
             deck.playbackRate = 1.0;
         }
 
-        function updateAudioVisuals() {
-            requestAnimationFrame(updateAudioVisuals);
+        // 🔥 Оптимізований запуск візуалізатора 🔥
+        function startVisualizer() {
+            if (!isVisualizerRunning) {
+                isVisualizerRunning = true;
+                updateAudioVisuals();
+            }
+        }
 
-            if (!audioCtx) return;
+        function updateAudioVisuals() {
+            if (!audioCtx) {
+                isVisualizerRunning = false;
+                return;
+            }
 
             const isCollapsed = container.classList.contains('collapsed');
             const trackData = playlist[currentTrackIndex];
@@ -525,12 +555,24 @@
                 analyser.getByteFrequencyData(dataArray);
             }
 
+            // Перевірка умов для повної зупинки циклу requestAnimationFrame
+            let isBarZeroed = barValues.every(v => Math.abs(v - 0.2) < 0.01);
+            if (!isPlaying && smoothedIntensity < 0.01 && isBarZeroed && !hasVideo) {
+                smoothedIntensity = 0;
+                container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
+                for (let i = 0; i < 4; i++) {
+                    vizBars[i].style.transform = `scaleY(0.2)`;
+                    barValues[i] = 0.2;
+                }
+                isVisualizerRunning = false;
+                return; // Зупиняємо цикл, економія ресурсів
+            }
+
+            requestAnimationFrame(updateAudioVisuals);
+
             if (!isPlaying || isCollapsed || hasVideo) {
                 smoothedIntensity = smoothedIntensity * 0.85; 
-                if (smoothedIntensity < 0.01) {
-                    smoothedIntensity = 0;
-                    container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
-                } else {
+                if (smoothedIntensity >= 0.01) {
                     applyShadow();
                 }
             } else {
@@ -751,10 +793,16 @@
             updateUI(track.title, track.artist, track.cover, track.cover);
         }
 
+        // 🔥 Оптимізоване завантаження з врахуванням Preloading 🔥
         function loadToDeck(deck, index, autoPlay = false) {
             const track = playlist[index];
-            deck.src = track.audio;
-            deck.load();
+            const trackUrl = new URL(track.audio, document.baseURI).href;
+            
+            // Запобігаємо перериванню буферизації, якщо трек вже завантажується
+            if (deck.src !== trackUrl) {
+                deck.src = track.audio;
+                deck.load();
+            }
             
             if (deck === activeDeck) {
                 readMetadata(track);
@@ -794,6 +842,21 @@
             return (currentTrackIndex - 1 + playlist.length) % playlist.length;
         }
 
+        // 🔥 Функція Preloading 🔥
+        function preloadNextTrack() {
+            if (isNextTrackPreloaded || isAutomixing || isRepeat) return;
+            const nextIndex = getNextIndex('next');
+            const nextTrack = playlist[nextIndex];
+            
+            const nextTrackUrl = new URL(nextTrack.audio, document.baseURI).href;
+            if (nextDeck.src !== nextTrackUrl) {
+                nextDeck.src = nextTrack.audio;
+                nextDeck.preload = "auto";
+                nextDeck.load();
+            }
+            isNextTrackPreloaded = true;
+        }
+
         // 🔥 ІНТЕЛЕКТУАЛЬНЕ ЗВЕДЕННЯ DJ AUTOMIX 🔥
         function triggerAutomix() {
             if (isAutomixing || isRepeat) return; 
@@ -805,20 +868,16 @@
             // Логіка підбору переходу на основі поточної енергії треку
             let mixMode = 'eq';
             if (smoothedIntensity > 0.6) {
-                // Якщо висока енергія — робимо Wash Out високими частотами або жорсткий Vinyl Brake
                 mixMode = Math.random() > 0.5 ? 'hpf_sweep' : 'vinyl_brake';
             } else if (smoothedIntensity < 0.2) {
-                // Якщо низька енергія — класичний EQ Mix або занурення басами
                 mixMode = Math.random() > 0.5 ? 'eq' : 'lpf_sweep';
             } else {
-                // Середня енергія — розмаїття
                 const r = Math.random();
                 if (r < 0.4) mixMode = 'eq';
                 else if (r < 0.7) mixMode = 'hpf_sweep';
                 else mixMode = 'lpf_sweep';
             }
 
-            // Для зупинки платівки час переходу коротший для динаміки
             const durationMs = mixMode === 'vinyl_brake' ? 2500 : CROSSFADE_DURATION * 1000;
             
             nextDeck.volume = 0;
@@ -845,6 +904,7 @@
                         
                         currentTrackIndex = nextIndex; 
                         isAutomixing = false;
+                        isNextTrackPreloaded = false; // Скидаємо прапорець для наступного Preload
                     } else {
                         // Відпрацьовуємо обраний діджейський прийом
                         if (mixMode === 'eq') {
@@ -861,7 +921,6 @@
                             if (audioCtx && activeDeck.djFilter) {
                                 activeDeck.djFilter.type = "highpass";
                                 activeDeck.djFilter.Q.value = 2.0;
-                                // Логарифмічне вимивання звуку високими до 4000 Гц
                                 activeDeck.djFilter.frequency.value = 20 * Math.pow(200, t); 
                             }
                         }
@@ -871,16 +930,14 @@
                             if (audioCtx && activeDeck.djFilter) {
                                 activeDeck.djFilter.type = "lowpass";
                                 activeDeck.djFilter.Q.value = 1.5;
-                                // Занурення звуку як під воду (вниз до 200 Гц)
                                 activeDeck.djFilter.frequency.value = 20000 * Math.pow(0.01, t);
                             }
                         }
                         else if (mixMode === 'vinyl_brake') {
-                            // Ефект скретчу/зупинки платівки
                             let brakeT = Math.min(1.0, t * 2.0); 
                             activeDeck.playbackRate = Math.max(0.001, 1.0 - brakeT);
                             activeDeck.volume = (1.0 - brakeT) * userVolume;
-                            nextDeck.volume = userVolume; // Новий трек вривається відразу
+                            nextDeck.volume = userVolume; 
                         }
                         
                         if (document.hidden) setTimeout(mixStep, 50); 
@@ -905,6 +962,7 @@
             resetDeckDJState(deckB);
 
             currentTrackIndex = getNextIndex(direction);
+            isNextTrackPreloaded = false; // Скидаємо при ручному перемиканні
             loadToDeck(activeDeck, currentTrackIndex, isPlaying);
         }
 
@@ -945,9 +1003,27 @@
         });
 
         [deckA, deckB].forEach(deck => {
+            // 🔥 Обробка помилок аудіо (Fail-safe) 🔥
+            deck.addEventListener('error', () => {
+                console.warn("Не вдалося завантажити аудіо:", deck.src);
+                if (deck === activeDeck) {
+                    if (errorCount < playlist.length) {
+                        errorCount++;
+                        setTimeout(() => manualSwitch('next'), 500); 
+                    } else {
+                        mainTitleEl.textContent = "Помилка завантаження";
+                        mainArtistEl.textContent = "Перевірте підключення до мережі";
+                    }
+                }
+            });
+
             deck.addEventListener('timeupdate', () => {
                 if (deck !== activeDeck) return;
                 
+                // Preloading наступного треку за 15 сек до кінця
+                if (deck.duration - deck.currentTime <= 15) preloadNextTrack();
+
+                // Автоматичне зведення
                 if (deck.duration - deck.currentTime <= CROSSFADE_DURATION && !isAutomixing && isPlaying) {
                     if (!isRepeat) triggerAutomix();
                 }
@@ -980,11 +1056,14 @@
             deck.addEventListener('playing', () => {
                 if (deck === activeDeck) {
                     isPlaying = true;
+                    errorCount = 0; // Скидаємо лічильник помилок при успішному старті
                     mainPlayIcon.style.display = 'none'; mainPauseIcon.style.display = 'block';
                     islandPlayIcon.style.display = 'none'; islandPauseIcon.style.display = 'block';
                     islandVisualizer.classList.remove('paused');
                     islandVisualizer.setAttribute('aria-hidden', 'false');
                     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+                    
+                    startVisualizer(); // Відновлюємо візуалізатор
                 }
             });
 
@@ -1025,12 +1104,35 @@
             haptics.lightTap(); updateProgressUI(e.touches[0].clientX);
         }, { passive: true });
 
+        // 🔥 Throttle для mousemove під час перетягування (Drag) 🔥
+        let isDragUpdatePending = false;
+        let dragClientX = 0;
+
         document.addEventListener('mousemove', (e) => {
-            if (isDraggingProgress) { e.preventDefault(); updateProgressUI(e.clientX); }
+            if (isDraggingProgress) { 
+                e.preventDefault(); 
+                dragClientX = e.clientX;
+                if (!isDragUpdatePending) {
+                    isDragUpdatePending = true;
+                    requestAnimationFrame(() => {
+                        updateProgressUI(dragClientX);
+                        isDragUpdatePending = false;
+                    });
+                }
+            }
         }, { passive: false });
 
         document.addEventListener('touchmove', (e) => {
-            if (isDraggingProgress) updateProgressUI(e.touches[0].clientX); 
+            if (isDraggingProgress) {
+                dragClientX = e.touches[0].clientX;
+                if (!isDragUpdatePending) {
+                    isDragUpdatePending = true;
+                    requestAnimationFrame(() => {
+                        updateProgressUI(dragClientX);
+                        isDragUpdatePending = false;
+                    });
+                }
+            }
         }, { passive: true });
 
         const endDrag = () => {
@@ -1043,15 +1145,26 @@
         document.addEventListener('mouseup', endDrag);
         document.addEventListener('touchend', endDrag);
 
+        // 🔥 Throttle для mousemove при звичайному наведенні на Timeline 🔥
+        let isProgressTooltipUpdating = false;
+
         progressArea.addEventListener('mousemove', (e) => {
             if (!activeDeck.duration || isDraggingProgress) return;
-            const rect = progressArea.getBoundingClientRect();
-            let percent = (e.clientX - rect.left) / rect.width;
-            percent = Math.max(0, Math.min(1, percent));
             
-            const hoverTime = percent * activeDeck.duration;
-            progressTooltip.textContent = formatTime(hoverTime);
-            progressTooltip.style.left = `${percent * 100}%`;
+            if (!isProgressTooltipUpdating) {
+                isProgressTooltipUpdating = true;
+                const clientX = e.clientX;
+                requestAnimationFrame(() => {
+                    const rect = progressArea.getBoundingClientRect();
+                    let percent = (clientX - rect.left) / rect.width;
+                    percent = Math.max(0, Math.min(1, percent));
+                    
+                    const hoverTime = percent * activeDeck.duration;
+                    progressTooltip.textContent = formatTime(hoverTime);
+                    progressTooltip.style.left = `${percent * 100}%`;
+                    isProgressTooltipUpdating = false;
+                });
+            }
         }, { passive: true });
 
         mainPlayBtn.addEventListener('click', togglePlay);
