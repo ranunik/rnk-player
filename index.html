@@ -400,11 +400,8 @@
         const deckB = document.createElement('audio'); 
         deckA.style.display = 'none'; deckB.style.display = 'none';
         
-        // Гарантія правильної роботи Web Audio API для онлайн середовища
-        if (window.location.protocol !== 'file:') {
-            deckA.crossOrigin = "anonymous";
-            deckB.crossOrigin = "anonymous";
-        }
+        // ВАЖЛИВО: Оскільки файли лежать на тому ж домені (GitHub Pages),
+        // ми ПРИБИРАЄМО crossOrigin="anonymous", щоб не провокувати CORS блокування
         
         document.body.appendChild(deckA);
         document.body.appendChild(deckB);
@@ -484,6 +481,21 @@
             }
         }
         setInitialLayout();
+
+        // 🛡 Універсальна захисна функція для будь-яких помилок відтворення (включаючи синхронні)
+        const safePlay = (mediaEl) => {
+            if (!mediaEl || !mediaEl.src) return;
+            try {
+                const playPromise = mediaEl.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.warn("Відтворення заблоковано браузером:", error);
+                    });
+                }
+            } catch (err) {
+                console.warn("Синхронна помилка відтворення:", err);
+            }
+        };
 
         // Ініціалізація аудіоконтексту ПІСЛЯ кліку користувача
         function initRealAudioVisualizer() {
@@ -757,20 +769,22 @@
                     bgVideo.src = track.video;
                     bgVideo.load();
                     if (autoPlay) {
-                        bgVideo.play().catch(e => console.warn('Video blocked:', e));
+                        safePlay(bgVideo);
                     }
                 }
             }
 
             if (autoPlay) { 
                 deck.volume = userVolume;
-                deck.play().catch(err => console.warn("AutoPlay blocked or media error:", err));
+                safePlay(deck);
             }
         }
 
         function togglePlay() {
             initRealAudioVisualizer(); 
-            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
 
             if (isPlaying) { 
                 haptics.pause(); 
@@ -778,10 +792,10 @@
                 if(playlist[currentTrackIndex].video) bgVideo.pause();
             } else { 
                 haptics.play(); 
-                // Захищаємось від помилки NotSupportedError при старті
-                activeDeck.play().catch(e => console.warn("Audio play error:", e)); 
+                // Тепер використовуємо safePlay, що блокує будь-які помилки в консолі
+                safePlay(activeDeck); 
                 if(playlist[currentTrackIndex].video) {
-                    bgVideo.play().catch(e => console.warn("Video play error:", e));
+                    safePlay(bgVideo);
                 }
             }
         }
@@ -804,43 +818,52 @@
             loadToDeck(nextDeck, nextIndex, false);
             
             nextDeck.volume = 0;
-            nextDeck.play().then(() => {
-                const startTime = Date.now();
-                const durationMs = CROSSFADE_DURATION * 1000;
+            
+            try {
+                const playPromise = nextDeck.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        const startTime = Date.now();
+                        const durationMs = CROSSFADE_DURATION * 1000;
 
-                function mixStep() {
-                    let elapsed = Date.now() - startTime;
-                    let t = elapsed / durationMs;
-                    
-                    if (t >= 1) {
-                        activeDeck.pause();
-                        activeDeck.currentTime = 0;
-                        
-                        const tempDeck = activeDeck; 
-                        activeDeck = nextDeck; 
-                        nextDeck = tempDeck;
-                        
-                        activeDeck.volume = userVolume;
-                        nextDeck.volume = 0;
-                        
-                        currentTrackIndex = nextIndex; 
-                        isAutomixing = false;
-                    } else {
-                        activeDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
-                        nextDeck.volume = Math.cos((1.0 - t) * 0.5 * Math.PI) * userVolume;
+                        function mixStep() {
+                            let elapsed = Date.now() - startTime;
+                            let t = elapsed / durationMs;
+                            
+                            if (t >= 1) {
+                                activeDeck.pause();
+                                activeDeck.currentTime = 0;
+                                
+                                const tempDeck = activeDeck; 
+                                activeDeck = nextDeck; 
+                                nextDeck = tempDeck;
+                                
+                                activeDeck.volume = userVolume;
+                                nextDeck.volume = 0;
+                                
+                                currentTrackIndex = nextIndex; 
+                                isAutomixing = false;
+                            } else {
+                                activeDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
+                                nextDeck.volume = Math.cos((1.0 - t) * 0.5 * Math.PI) * userVolume;
+                                
+                                if (document.hidden) setTimeout(mixStep, 50); 
+                                else requestAnimationFrame(mixStep);
+                            }
+                        }
                         
                         if (document.hidden) setTimeout(mixStep, 50); 
                         else requestAnimationFrame(mixStep);
-                    }
+                        
+                    }).catch(e => {
+                        isAutomixing = false;
+                        console.warn("Automix transition blocked:", e);
+                    });
                 }
-                
-                if (document.hidden) setTimeout(mixStep, 50); 
-                else requestAnimationFrame(mixStep);
-                
-            }).catch(e => {
+            } catch (err) {
                 isAutomixing = false;
-                console.warn("Automix transition blocked:", e);
-            });
+                console.warn("Automix sync error:", err);
+            }
         }
 
         function manualSwitch(direction) {
@@ -913,7 +936,7 @@
                 if (deck === activeDeck) {
                     if (isRepeat) { 
                         activeDeck.currentTime = 0; 
-                        activeDeck.play().catch(e => console.warn("Repeat play blocked:", e)); 
+                        safePlay(activeDeck);
                     } else { 
                         manualSwitch('next'); 
                     }
