@@ -36,7 +36,6 @@
             position: absolute; 
             bottom: 10px; 
             left: 50%;
-            /* Додано backface-visibility для кращого GPU рендерингу */
             transform: translateX(-50%) translateZ(0); 
             backface-visibility: hidden;
             
@@ -60,7 +59,6 @@
             isolation: isolate;
             -webkit-mask-image: -webkit-radial-gradient(white, black);
             z-index: 100;
-            /* Оптимізовано will-change: додано box-shadow */
             will-change: width, height, border-radius, box-shadow;
         }
 
@@ -144,7 +142,6 @@
 
         .island-visualizer { 
             display: flex; gap: 2.5px; align-items: center; justify-content: center; height: 16px; margin: 0 4px;
-            /* Ізоляція для зменшення перемальовок */
             contain: content; 
         }
         
@@ -417,9 +414,31 @@
         let smoothedIntensity = 0;
         let currentHue = 140;
         let barValues = [0.2, 0.2, 0.2, 0.2];
-        let lastAppliedBars = [0, 0, 0, 0]; // Кеш для DOM записів
-        let isShadowCleared = false; // Кеш стану тіні
-        let lastShadowUpdateTime = 0; // Для тротлінгу тіні
+        let lastAppliedBars = [0, 0, 0, 0]; 
+        let isShadowCleared = false; 
+        let lastShadowUpdateTime = 0; 
+        
+        // 🔥 ПРАПОРЕЦЬ ДЛЯ БЛОКУВАННЯ ТА ДОПОМІЖНА ФУНКЦІЯ 🔥
+        let isLayoutTransitioning = false;
+
+        function setLayoutState(expand) {
+            isLayoutTransitioning = true;
+            if (expand) {
+                container.classList.remove('collapsed');
+                container.classList.add('expanded');
+                container.setAttribute('aria-expanded', 'true');
+            } else {
+                container.classList.remove('expanded');
+                container.classList.add('collapsed');
+                container.setAttribute('aria-expanded', 'false');
+            }
+            
+            // Заморожуємо рендер на 500мс (точно як тривалість transition у CSS)
+            setTimeout(() => {
+                isLayoutTransitioning = false;
+                if (expand) cacheDimensions();
+            }, 500);
+        }
 
         let progressHideTimeout;
 
@@ -461,12 +480,10 @@
         const shuffleBtn = document.getElementById('shuffle-btn');
         const repeatBtn = document.getElementById('repeat-btn');
 
-        // 🔥 ВИРІШЕННЯ ISSUE 1: Глобальне розблокування медіа-елементів 🔥
         let isMediaUnlocked = false;
         function unlockMediaElements() {
             if (isMediaUnlocked) return;
             try {
-                // Встановлюємо пустий звук для другої деки, щоб браузер дозволив play()
                 if (!deckB.src) deckB.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
                 
                 const playPromiseA = deckA.play();
@@ -606,6 +623,13 @@
                 analyser.getByteFrequencyData(dataArray);
             }
 
+            // 🔥 БЛОКУВАННЯ ОБЧИСЛЕНЬ ТА DOM ЗАПИСІВ ПІД ЧАС АНІМАЦІЇ 🔥
+            // Це повністю звільняє GPU для плавного згортання/розгортання
+            if (isLayoutTransitioning) {
+                requestAnimationFrame(updateAudioVisuals);
+                return;
+            }
+
             let isBarZeroed = barValues.every(v => Math.abs(v - 0.2) < 0.01);
             if (!isPlaying && smoothedIntensity < 0.01 && isBarZeroed && !hasVideo) {
                 smoothedIntensity = 0;
@@ -629,7 +653,6 @@
 
             if (!isPlaying || isCollapsed || hasVideo) {
                 smoothedIntensity = smoothedIntensity * 0.85; 
-                // Тротлінг для тіні
                 if (smoothedIntensity >= 0.01 && (now - lastShadowUpdateTime > 33)) {
                     applyShadow();
                     lastShadowUpdateTime = now;
@@ -652,18 +675,15 @@
                 let hueVibration = (midAvg * 30);
                 currentHue = (baseTrackHue + hueVibration) % 360;
                 
-                // Тротлінг: оновлюємо тінь лише ~30 разів на секунду, щоб не навантажувати GPU
                 if (now - lastShadowUpdateTime > 33) {
                     applyShadow();
                     lastShadowUpdateTime = now;
                 }
             }
 
-            // Розрахунок стовпчиків (залишається на 60fps для плавності)
             if (!isPlaying) {
                 for (let i = 0; i < 4; i++) {
                     barValues[i] = barValues[i] + (0.2 - barValues[i]) * 0.2;
-                    // Оптимізація DOM-записів: оновлюємо лише якщо значення змінилось помітно
                     let roundedVal = Math.round(Math.max(0.2, barValues[i]) * 100) / 100;
                     if (lastAppliedBars[i] !== roundedVal) {
                         vizBars[i].style.transform = `scaleY(${roundedVal})`;
@@ -687,7 +707,7 @@
                 for (let i = 0; i < 4; i++) {
                     barValues[i] = barValues[i] + (targets[i] - barValues[i]) * 0.3; 
                     let finalVal = Math.max(0.2, Math.min(1.0, barValues[i]));
-                    finalVal = Math.round(finalVal * 100) / 100; // Округлюємо для уникнення зайвих перемальовок браузером
+                    finalVal = Math.round(finalVal * 100) / 100;
                     
                     if (lastAppliedBars[i] !== finalVal) {
                         vizBars[i].style.transform = `scaleY(${finalVal})`;
@@ -714,7 +734,6 @@
                 let sat = Math.floor(Math.min(100, 60 + smoothedIntensity * 40)); 
                 let lit = Math.floor(Math.min(60, 40 + smoothedIntensity * 20));  
 
-                // Попередньо вираховуємо розміри, щоб не навантажувати браузер математикою в рядку
                 const alpha1 = (smoothedIntensity * 0.85).toFixed(2);
                 const alpha2 = (smoothedIntensity * 0.55).toFixed(2);
                 const alpha3 = (smoothedIntensity * 0.35).toFixed(2);
@@ -756,7 +775,6 @@
             navigator.mediaSession.setActionHandler('nexttrack', () => manualSwitch('next'));
         }
 
-        // 🔥 ДОДАНО: Обробка свайпів в Dynamic Island (для мобільних) 🔥
         let islandTouchStartX = 0;
         let islandTouchEndX = 0;
         let isIslandSwiping = false;
@@ -795,37 +813,27 @@
         islandContent.addEventListener('click', (e) => {
             if(e.target.closest('.island-btn') || isIslandSwiping) return;
             haptics.expand(); 
-            container.classList.remove('collapsed');
-            container.classList.add('expanded');
-            container.setAttribute('aria-expanded', 'true');
-            setTimeout(cacheDimensions, 500); 
+            setLayoutState(true);
         });
 
         container.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && container.classList.contains('collapsed')) {
                 e.preventDefault();
                 haptics.expand(); 
-                container.classList.remove('collapsed');
-                container.classList.add('expanded');
-                container.setAttribute('aria-expanded', 'true');
-                setTimeout(cacheDimensions, 500);
+                setLayoutState(true);
             }
         });
 
         collapseBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             haptics.collapse(); 
-            container.classList.remove('expanded');
-            container.classList.add('collapsed');
-            container.setAttribute('aria-expanded', 'false');
+            setLayoutState(false);
         });
 
         expandedContent.addEventListener('click', (e) => {
             if (e.target === expandedContent) {
                 haptics.collapse(); 
-                container.classList.remove('expanded');
-                container.classList.add('collapsed');
-                container.setAttribute('aria-expanded', 'false');
+                setLayoutState(false);
             }
         });
 
@@ -1199,7 +1207,6 @@
                     requestAnimationFrame(() => {
                         if (deck === activeDeck && !isDraggingProgress) {
                             const percent = (deck.currentTime / deck.duration) * 100;
-                            // Оптимізація запису ширини:
                             progressBar.style.width = `${percent}%`;
                             progressArea.setAttribute('aria-valuenow', percent.toFixed(0));
                             currTimeEl.textContent = formatTime(deck.currentTime);
