@@ -9,7 +9,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js" defer></script>
     
     <style>
@@ -151,20 +150,6 @@
             transform-origin: center; will-change: transform; transform: scaleY(0.2);
             box-shadow: 0 0 8px var(--viz-color); transition: background-color 0.5s ease, box-shadow 0.5s ease;
         }
-        
-        .island-visualizer:not(.paused) .visualizer-bar:nth-child(1) { animation: iosEq1 1.2s ease-in-out infinite; }
-        .island-visualizer:not(.paused) .visualizer-bar:nth-child(2) { animation: iosEq2 1.4s ease-in-out infinite; }
-        .island-visualizer:not(.paused) .visualizer-bar:nth-child(3) { animation: iosEq3 1.1s ease-in-out infinite; }
-        .island-visualizer:not(.paused) .visualizer-bar:nth-child(4) { animation: iosEq4 1.3s ease-in-out infinite; }
-        
-        .island-visualizer.paused .visualizer-bar { animation: pauseToDots 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards !important; }
-        
-        @keyframes pauseToDots { to { transform: scaleY(0.2); } }
-
-        @keyframes iosEq1 { 0%, 100% { transform: scaleY(0.3); } 20% { transform: scaleY(0.8); } 40% { transform: scaleY(0.4); } 60% { transform: scaleY(1.0); } 80% { transform: scaleY(0.5); } }
-        @keyframes iosEq2 { 0%, 100% { transform: scaleY(0.7); } 20% { transform: scaleY(0.3); } 40% { transform: scaleY(1.0); } 60% { transform: scaleY(0.5); } 80% { transform: scaleY(0.8); } }
-        @keyframes iosEq3 { 0%, 100% { transform: scaleY(0.4); } 20% { transform: scaleY(1.0); } 40% { transform: scaleY(0.5); } 60% { transform: scaleY(0.8); } 80% { transform: scaleY(0.3); } }
-        @keyframes iosEq4 { 0%, 100% { transform: scaleY(0.8); } 20% { transform: scaleY(0.5); } 40% { transform: scaleY(0.9); } 60% { transform: scaleY(0.3); } 80% { transform: scaleY(0.7); } }
 
         .island-controls { display: flex; align-items: center; gap: 2px; padding-right: 4px; }
         .island-btn { background: none; border: none; color: #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; border-radius: 50%; transition: 0.2s; outline: none; }
@@ -345,12 +330,11 @@
 
 <script>
     const initializePlayer = () => {
-        if (typeof ColorThief === 'undefined' || typeof window.jsmediatags === 'undefined') {
+        if (typeof ColorThief === 'undefined') {
             setTimeout(initializePlayer, 50);
             return;
         }
 
-        const jsmediatags = window.jsmediatags;
         const colorThief = new ColorThief();
 
         const haptics = {
@@ -365,7 +349,6 @@
 
         const defaultCover = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjI1NiIgZmlsbD0iIzExMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjE4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjIyIiBzdHJva2Utd2lkdGg9IjEwIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxMjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzIyMiIgc3Ryb2tlLXdpZHRoPSIxMCIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjgwIiBmaWxsPSIjRkY1NzIyIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMCIgZmlsbD0iIzExMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjgiIGZpbGw9IiNGRkYiLz48L3N2Zz4=";
 
-        // 🔥 ШЛЯХИ ТЕПЕР ЛОКАЛЬНІ (з папок на GitHub) 🔥
         const playlist = [
             { title: "ВАВИЛОН", artist: "YARMAK", audio: "./audio/01.mp3", video: "", cover: "./covers/01.jpg" },
             { title: "Не мовчи", artist: "БЕЗ ОБМЕЖЕНЬ", audio: "./audio/02.mp3", video: "", cover: "./covers/02.jpg" },
@@ -411,7 +394,6 @@
         let currentTrackIndex = 0;
         let isPlaying = false;
         let isAutomixing = false;
-        let currentBlobUrl = null; 
         
         let isUpdatingTime = false;
         let isDraggingProgress = false;
@@ -423,12 +405,14 @@
         let baseTrackHue = 140; 
         let smoothedIntensity = 0;
         let currentHue = 140;
+        let barValues = [0.2, 0.2, 0.2, 0.2];
 
         const container = document.getElementById('player-container');
         const expandedContent = document.getElementById('expanded-content');
         const collapseBtn = document.getElementById('collapse-btn');
         const islandContent = document.getElementById('island-content');
         const islandVisualizer = document.getElementById('island-visualizer');
+        const vizBars = document.querySelectorAll('.visualizer-bar');
         
         const bgSkeleton = document.getElementById('bg-skeleton');
         const bgVideo = document.getElementById('bg-video');
@@ -481,7 +465,7 @@
         }
         setInitialLayout();
 
-        // Ініціалізація аудіоконтексту ПІСЛЯ кліку користувача (вимога браузерів)
+        // Ініціалізація аудіоконтексту ПІСЛЯ кліку користувача
         function initRealAudioVisualizer() {
             if (audioInitialized) return;
             try {
@@ -499,80 +483,108 @@
                 analyser.connect(audioCtx.destination);
                 
                 audioInitialized = true;
-                updateBeatGlow(); 
+                updateAudioVisuals(); 
             } catch (e) {
                 console.warn("Web Audio API failed to initialize:", e);
             }
         }
 
-        // 🔥 Чесний аналізатор + DMX логіка з боковим світінням 🔥
-        function updateBeatGlow() {
-            requestAnimationFrame(updateBeatGlow);
+        // 🔥 Універсальний цикл анімації: Світіння + Смужки Візуалізатора 🔥
+        function updateAudioVisuals() {
+            requestAnimationFrame(updateAudioVisuals);
 
+            if (!audioCtx) return;
+
+            const isCollapsed = container.classList.contains('collapsed');
             const trackData = playlist[currentTrackIndex];
             const hasVideo = trackData && trackData.video !== "";
 
-            // Вимикаємо при згортанні або якщо є відео
-            if (!isPlaying || container.classList.contains('collapsed') || hasVideo || !audioCtx) {
+            if (isPlaying) {
+                analyser.getByteFrequencyData(dataArray);
+            }
+
+            // --- 1. DYNAMIC SHADOW (Expanded Mode) ---
+            if (!isPlaying || isCollapsed || hasVideo) {
                 smoothedIntensity = smoothedIntensity * 0.85; 
                 if (smoothedIntensity < 0.01) {
                     smoothedIntensity = 0;
                     container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
-                    return;
+                } else {
+                    applyShadow();
                 }
             } else {
-                // Читаємо реальні дані з треку
-                analyser.getByteFrequencyData(dataArray);
-
-                // 1. Аналіз Басу (Kick/Bass) - низькі частоти для сили пульсації
                 let bassSum = 0;
                 for (let i = 1; i < 6; i++) bassSum += dataArray[i];
                 let bassAvg = (bassSum / 5) / 255;
 
-                // 2. Аналіз Середніх частот (Vocals/Mids) - для швидкості переливання кольору
                 let midSum = 0;
                 for (let i = 20; i < 80; i++) midSum += dataArray[i];
                 let midAvg = (midSum / 60) / 255;
 
-                // Експонента: щоб легкий бас ігнорувався, а глибокий удар "спалахував"
                 let kick = Math.pow(bassAvg, 2.5);
-
-                // Інтенсивність НЕ залежить від userVolume
                 let intensity = kick * 1.5;
                 if (intensity > 1.0) intensity = 1.0;
 
-                // Згладжування (Lerp) для ефекту плавного згасання LED лампи
                 smoothedIntensity = smoothedIntensity * 0.6 + intensity * 0.4;
-                
-                // Колір переливається швидше під час вокалу/соло
                 currentHue = (currentHue + 0.4 + (midAvg * 3.0)) % 360;
+                
+                applyShadow();
             }
 
-            // Колірна палітра відштовхується від базового кольору обкладинки
-            let hue1 = Math.floor(currentHue);
-            let hue2 = Math.floor((currentHue + 45) % 360);
-            let hue3 = Math.floor((currentHue + 90) % 360);
+            // --- 2. DYNAMIC ISLAND VISUALIZER BARS (Collapsed Mode) ---
+            if (!isPlaying) {
+                for (let i = 0; i < 4; i++) {
+                    // Плавне загасання смужок
+                    barValues[i] = barValues[i] + (0.2 - barValues[i]) * 0.2;
+                    vizBars[i].style.transform = `scaleY(${Math.max(0.2, barValues[i])})`;
+                }
+            } else {
+                const getAvg = (start, end) => {
+                    let sum = 0;
+                    for (let i = start; i < end; i++) sum += dataArray[i];
+                    return (sum / (end - start)) / 255;
+                };
 
-            const alpha1 = (smoothedIntensity * 0.8).toFixed(2);
-            const alpha2 = (smoothedIntensity * 0.5).toFixed(2);
-            const alpha3 = (smoothedIntensity * 0.2).toFixed(2);
+                // Мапінг частот на 4 смужки візуалізатора
+                const targets = [
+                    0.2 + getAvg(1, 6) * 1.5,       // Bass
+                    0.2 + getAvg(6, 16) * 1.2,      // Low-Mid
+                    0.2 + getAvg(16, 41) * 1.0,     // Mid
+                    0.2 + (Math.max(...dataArray.slice(41, 100)) / 255) * 1.2 // Highs
+                ];
 
-            // 🔥 Світіння суворо ЛИШЕ з правого та лівого боку (від'ємний spread) 🔥
-            const shadow = `
-                -${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
-                 ${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
-                 
-                -${30 + smoothedIntensity * 40}px 0 ${50 + smoothedIntensity * 40}px -15px hsla(${hue2}, 100%, 50%, ${alpha2}),
-                 ${30 + smoothedIntensity * 40}px 0 ${50 + smoothedIntensity * 40}px -15px hsla(${hue2}, 100%, 50%, ${alpha2}),
-                 
-                -${50 + smoothedIntensity * 50}px 0 ${80 + smoothedIntensity * 50}px -20px hsla(${hue3}, 100%, 50%, ${alpha3}),
-                 ${50 + smoothedIntensity * 50}px 0 ${80 + smoothedIntensity * 50}px -20px hsla(${hue3}, 100%, 50%, ${alpha3}),
-                 
-                inset -${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.4}),
-                inset  ${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.4})
-            `;
+                for (let i = 0; i < 4; i++) {
+                    barValues[i] = barValues[i] + (targets[i] - barValues[i]) * 0.3; // Згладжування
+                    const finalVal = Math.max(0.2, Math.min(1.0, barValues[i]));
+                    vizBars[i].style.transform = `scaleY(${finalVal})`;
+                }
+            }
 
-            container.style.setProperty('--dynamic-shadow', shadow);
+            function applyShadow() {
+                if (smoothedIntensity === 0) return;
+                let hue1 = Math.floor(currentHue);
+                let hue2 = Math.floor((currentHue + 45) % 360);
+                let hue3 = Math.floor((currentHue + 90) % 360);
+
+                const alpha1 = (smoothedIntensity * 0.8).toFixed(2);
+                const alpha2 = (smoothedIntensity * 0.5).toFixed(2);
+                const alpha3 = (smoothedIntensity * 0.2).toFixed(2);
+
+                const shadow = `
+                    -${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
+                     ${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
+                     
+                    -${30 + smoothedIntensity * 40}px 0 ${50 + smoothedIntensity * 40}px -15px hsla(${hue2}, 100%, 50%, ${alpha2}),
+                     ${30 + smoothedIntensity * 40}px 0 ${50 + smoothedIntensity * 40}px -15px hsla(${hue2}, 100%, 50%, ${alpha2}),
+                     
+                    -${50 + smoothedIntensity * 50}px 0 ${80 + smoothedIntensity * 50}px -20px hsla(${hue3}, 100%, 50%, ${alpha3}),
+                     ${50 + smoothedIntensity * 50}px 0 ${80 + smoothedIntensity * 50}px -20px hsla(${hue3}, 100%, 50%, ${alpha3}),
+                     
+                    inset -${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.4}),
+                    inset  ${15 + smoothedIntensity * 15}px 0 ${25 + smoothedIntensity * 15}px -10px hsla(${hue1}, 100%, 60%, ${smoothedIntensity * 0.4})
+                `;
+                container.style.setProperty('--dynamic-shadow', shadow);
+            }
         }
 
         if ('mediaSession' in navigator) {
@@ -719,28 +731,6 @@
 
         function readMetadata(track) {
             updateUI(track.title, track.artist, track.cover, track.cover);
-            
-            if(track.audio.startsWith('data:') || track.audio.startsWith('blob:')) return;
-
-            jsmediatags.read(track.audio, {
-                onSuccess: function(tag) {
-                    const tags = tag.tags;
-                    if (tags.picture) {
-                        try {
-                            const data = tags.picture.data;
-                            const format = tags.picture.format;
-                            const bytes = new Uint8Array(data);
-                            const blob = new Blob([bytes], { type: format });
-                            
-                            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
-                            currentBlobUrl = URL.createObjectURL(blob);
-                            
-                            updateUI(tags.title || track.title, tags.artist || track.artist, currentBlobUrl, track.cover);
-                        } catch(e) {}
-                    }
-                },
-                onError: function() {}
-            });
         }
 
         function loadToDeck(deck, index, autoPlay = false) {
