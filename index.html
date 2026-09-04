@@ -375,7 +375,6 @@
             { title: "Пекло", artist: "OTOY", audio: "./audio/23.mp3", video: "", cover: "./covers/23.jpg" }
         ];
 
-        const CROSSFADE_DURATION = 6; 
         let userVolume = 1.0;
         let isShuffle = false;
         let isRepeat = false;
@@ -510,7 +509,6 @@
                 
                 audioInitialized = true;
                 
-                // Знімаємо слухачі, щоб не викликати повторно
                 document.body.removeEventListener('click', initRealAudioVisualizer);
                 document.body.removeEventListener('touchstart', initRealAudioVisualizer);
             } catch (e) {
@@ -518,7 +516,6 @@
             }
         }
         
-        // Гарантована ініціалізація AudioContext при першій взаємодії
         document.body.addEventListener('click', initRealAudioVisualizer, { once: true });
         document.body.addEventListener('touchstart', initRealAudioVisualizer, { once: true, passive: true });
 
@@ -555,7 +552,6 @@
                 analyser.getByteFrequencyData(dataArray);
             }
 
-            // Перевірка умов для повної зупинки циклу requestAnimationFrame
             let isBarZeroed = barValues.every(v => Math.abs(v - 0.2) < 0.01);
             if (!isPlaying && smoothedIntensity < 0.01 && isBarZeroed && !hasVideo) {
                 smoothedIntensity = 0;
@@ -565,7 +561,7 @@
                     barValues[i] = 0.2;
                 }
                 isVisualizerRunning = false;
-                return; // Зупиняємо цикл, економія ресурсів
+                return; 
             }
 
             requestAnimationFrame(updateAudioVisuals);
@@ -793,12 +789,10 @@
             updateUI(track.title, track.artist, track.cover, track.cover);
         }
 
-        // 🔥 Оптимізоване завантаження з врахуванням Preloading 🔥
         function loadToDeck(deck, index, autoPlay = false) {
             const track = playlist[index];
             const trackUrl = new URL(track.audio, document.baseURI).href;
             
-            // Запобігаємо перериванню буферизації, якщо трек вже завантажується
             if (deck.src !== trackUrl) {
                 deck.src = track.audio;
                 deck.load();
@@ -824,11 +818,13 @@
 
             if (isPlaying) { 
                 haptics.pause(); 
-                activeDeck.pause(); 
+                activeDeck.pause();
+                if (isAutomixing) nextDeck.pause(); 
             } else { 
                 haptics.play(); 
                 activeDeck.play(); 
-                if(playlist[currentTrackIndex].video) bgVideo.play(); 
+                if (isAutomixing) nextDeck.play(); 
+                if (playlist[currentTrackIndex].video) bgVideo.play(); 
             }
         }
 
@@ -842,7 +838,6 @@
             return (currentTrackIndex - 1 + playlist.length) % playlist.length;
         }
 
-        // 🔥 Функція Preloading 🔥
         function preloadNextTrack() {
             if (isNextTrackPreloaded || isAutomixing || isRepeat) return;
             const nextIndex = getNextIndex('next');
@@ -857,15 +852,15 @@
             isNextTrackPreloaded = true;
         }
 
-        // 🔥 ІНТЕЛЕКТУАЛЬНЕ ЗВЕДЕННЯ DJ AUTOMIX 🔥
-        function triggerAutomix() {
+        // 🔥 ДИНАМІЧНЕ ІНТЕЛЕКТУАЛЬНЕ ЗВЕДЕННЯ DJ AUTOMIX 🔥
+        // Тепер функція приймає розраховану тривалість кроссфейду
+        function triggerAutomix(crossfadeSec) {
             if (isAutomixing || isRepeat) return; 
             isAutomixing = true;
             
             const nextIndex = getNextIndex('next');
             loadToDeck(nextDeck, nextIndex, false);
             
-            // Логіка підбору переходу на основі поточної енергії треку
             let mixMode = 'eq';
             if (smoothedIntensity > 0.6) {
                 mixMode = Math.random() > 0.5 ? 'hpf_sweep' : 'vinyl_brake';
@@ -878,66 +873,76 @@
                 else mixMode = 'lpf_sweep';
             }
 
-            const durationMs = mixMode === 'vinyl_brake' ? 2500 : CROSSFADE_DURATION * 1000;
+            const durationMs = mixMode === 'vinyl_brake' ? 2500 : crossfadeSec * 1000;
             
             nextDeck.volume = 0;
             nextDeck.play().then(() => {
+                if (!isAutomixing) return; 
+
+                const fadingOutDeck = activeDeck;
+                const fadingInDeck = nextDeck;
+
+                // РАННІЙ SWAP UI
+                activeDeck = fadingInDeck;
+                nextDeck = fadingOutDeck; 
+                currentTrackIndex = nextIndex;
+
+                readMetadata(playlist[currentTrackIndex]); 
+                if (playlist[currentTrackIndex].video) {
+                    bgVideo.src = playlist[currentTrackIndex].video;
+                    bgVideo.play().catch(() => {});
+                }
+
                 const startTime = Date.now();
 
                 function mixStep() {
+                    if (!isAutomixing) return; 
+
                     let elapsed = Date.now() - startTime;
-                    let t = elapsed / durationMs;
+                    let t = Math.min(1, elapsed / durationMs);
                     
                     if (t >= 1) {
-                        activeDeck.pause();
-                        activeDeck.currentTime = 0;
+                        fadingOutDeck.pause();
+                        fadingOutDeck.currentTime = 0;
                         
-                        resetDeckDJState(activeDeck);
-                        resetDeckDJState(nextDeck);
+                        resetDeckDJState(fadingOutDeck);
+                        resetDeckDJState(fadingInDeck);
                         
-                        const tempDeck = activeDeck; 
-                        activeDeck = nextDeck; 
-                        nextDeck = tempDeck;
-                        
-                        activeDeck.volume = userVolume;
-                        nextDeck.volume = 0;
-                        
-                        currentTrackIndex = nextIndex; 
+                        fadingInDeck.volume = userVolume;
                         isAutomixing = false;
-                        isNextTrackPreloaded = false; // Скидаємо прапорець для наступного Preload
+                        isNextTrackPreloaded = false;
                     } else {
-                        // Відпрацьовуємо обраний діджейський прийом
                         if (mixMode === 'eq') {
-                            activeDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
-                            nextDeck.volume = Math.sin(t * 0.5 * Math.PI) * userVolume;
-                            if (audioCtx && activeDeck.djFilter && nextDeck.djFilter) {
-                                activeDeck.djFilter.gain.value = Math.max(-24, -24 * (t * 1.5));
-                                nextDeck.djFilter.gain.value = -12 * (1 - t);
+                            fadingOutDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
+                            fadingInDeck.volume = Math.sin(t * 0.5 * Math.PI) * userVolume;
+                            if (audioCtx && fadingOutDeck.djFilter && fadingInDeck.djFilter) {
+                                fadingOutDeck.djFilter.gain.value = Math.max(-24, -24 * (t * 1.5));
+                                fadingInDeck.djFilter.gain.value = -12 * (1 - t);
                             }
                         } 
                         else if (mixMode === 'hpf_sweep') {
-                            activeDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
-                            nextDeck.volume = Math.sin(t * 0.5 * Math.PI) * userVolume;
-                            if (audioCtx && activeDeck.djFilter) {
-                                activeDeck.djFilter.type = "highpass";
-                                activeDeck.djFilter.Q.value = 2.0;
-                                activeDeck.djFilter.frequency.value = 20 * Math.pow(200, t); 
+                            fadingOutDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
+                            fadingInDeck.volume = Math.sin(t * 0.5 * Math.PI) * userVolume;
+                            if (audioCtx && fadingOutDeck.djFilter) {
+                                fadingOutDeck.djFilter.type = "highpass";
+                                fadingOutDeck.djFilter.Q.value = 2.0;
+                                fadingOutDeck.djFilter.frequency.value = 20 * Math.pow(200, t); 
                             }
                         }
                         else if (mixMode === 'lpf_sweep') {
-                            activeDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
-                            nextDeck.volume = Math.sin(t * 0.5 * Math.PI) * userVolume;
-                            if (audioCtx && activeDeck.djFilter) {
-                                activeDeck.djFilter.type = "lowpass";
-                                activeDeck.djFilter.Q.value = 1.5;
-                                activeDeck.djFilter.frequency.value = 20000 * Math.pow(0.01, t);
+                            fadingOutDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
+                            fadingInDeck.volume = Math.sin(t * 0.5 * Math.PI) * userVolume;
+                            if (audioCtx && fadingOutDeck.djFilter) {
+                                fadingOutDeck.djFilter.type = "lowpass";
+                                fadingOutDeck.djFilter.Q.value = 1.5;
+                                fadingOutDeck.djFilter.frequency.value = 20000 * Math.pow(0.01, t);
                             }
                         }
                         else if (mixMode === 'vinyl_brake') {
                             let brakeT = Math.min(1.0, t * 2.0); 
-                            activeDeck.playbackRate = Math.max(0.001, 1.0 - brakeT);
-                            activeDeck.volume = (1.0 - brakeT) * userVolume;
-                            nextDeck.volume = userVolume; 
+                            fadingOutDeck.playbackRate = Math.max(0.001, 1.0 - brakeT);
+                            fadingOutDeck.volume = (1.0 - brakeT) * userVolume;
+                            fadingInDeck.volume = userVolume; 
                         }
                         
                         if (document.hidden) setTimeout(mixStep, 50); 
@@ -955,14 +960,18 @@
 
         function manualSwitch(direction) {
             haptics.tap(); 
-            activeDeck.pause(); isAutomixing = false;
-            activeDeck.volume = userVolume;
+            deckA.pause(); 
+            deckB.pause(); 
+            isAutomixing = false;
+            
+            deckA.volume = userVolume;
+            deckB.volume = userVolume;
             
             resetDeckDJState(deckA);
             resetDeckDJState(deckB);
 
             currentTrackIndex = getNextIndex(direction);
-            isNextTrackPreloaded = false; // Скидаємо при ручному перемиканні
+            isNextTrackPreloaded = false; 
             loadToDeck(activeDeck, currentTrackIndex, isPlaying);
         }
 
@@ -1003,7 +1012,6 @@
         });
 
         [deckA, deckB].forEach(deck => {
-            // 🔥 Обробка помилок аудіо (Fail-safe) 🔥
             deck.addEventListener('error', () => {
                 console.warn("Не вдалося завантажити аудіо:", deck.src);
                 if (deck === activeDeck) {
@@ -1020,12 +1028,33 @@
             deck.addEventListener('timeupdate', () => {
                 if (deck !== activeDeck) return;
                 
-                // Preloading наступного треку за 15 сек до кінця
-                if (deck.duration - deck.currentTime <= 15) preloadNextTrack();
+                const timeLeft = deck.duration - deck.currentTime;
 
-                // Автоматичне зведення
-                if (deck.duration - deck.currentTime <= CROSSFADE_DURATION && !isAutomixing && isPlaying) {
-                    if (!isRepeat) triggerAutomix();
+                // Прелоад заздалегідь перед потенційним довгим міксом
+                if (timeLeft <= 20) preloadNextTrack();
+
+                // 🔥 Розумне визначення моменту міксу 🔥
+                if (timeLeft <= 15 && !isAutomixing && isPlaying && !isRepeat && deck.duration > 20) {
+                    let shouldMixNow = false;
+                    let plannedDuration = 6;
+
+                    if (smoothedIntensity < 0.15 && timeLeft <= 12) {
+                        // Яма або затухання (Outro) - довгий плавний мікс
+                        shouldMixNow = true;
+                        plannedDuration = timeLeft;
+                    } else if (smoothedIntensity >= 0.15 && smoothedIntensity < 0.6 && timeLeft <= 7) {
+                        // Середня енергія - стандартний перехід
+                        shouldMixNow = true;
+                        plannedDuration = timeLeft;
+                    } else if (smoothedIntensity >= 0.6 && timeLeft <= 4) {
+                        // Висока енергія, жорсткий фінал - швидкий зріз
+                        shouldMixNow = true;
+                        plannedDuration = Math.min(timeLeft, 4); 
+                    }
+
+                    if (shouldMixNow) {
+                        triggerAutomix(plannedDuration);
+                    }
                 }
 
                 if (!isUpdatingTime) {
@@ -1056,14 +1085,14 @@
             deck.addEventListener('playing', () => {
                 if (deck === activeDeck) {
                     isPlaying = true;
-                    errorCount = 0; // Скидаємо лічильник помилок при успішному старті
+                    errorCount = 0; 
                     mainPlayIcon.style.display = 'none'; mainPauseIcon.style.display = 'block';
                     islandPlayIcon.style.display = 'none'; islandPauseIcon.style.display = 'block';
                     islandVisualizer.classList.remove('paused');
                     islandVisualizer.setAttribute('aria-hidden', 'false');
                     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
                     
-                    startVisualizer(); // Відновлюємо візуалізатор
+                    startVisualizer(); 
                 }
             });
 
@@ -1093,18 +1122,15 @@
         }
 
         progressArea.addEventListener('mousedown', (e) => {
-            if(isAutomixing) return;
             isDraggingProgress = true;
             haptics.lightTap(); updateProgressUI(e.clientX);
         });
 
         progressArea.addEventListener('touchstart', (e) => {
-            if(isAutomixing) return;
             isDraggingProgress = true;
             haptics.lightTap(); updateProgressUI(e.touches[0].clientX);
         }, { passive: true });
 
-        // 🔥 Throttle для mousemove під час перетягування (Drag) 🔥
         let isDragUpdatePending = false;
         let dragClientX = 0;
 
@@ -1139,13 +1165,21 @@
             if (isDraggingProgress) {
                 isDraggingProgress = false;
                 if (activeDeck.duration) activeDeck.currentTime = dragPercent * activeDeck.duration;
+                
+                if (isAutomixing) {
+                    isAutomixing = false;
+                    nextDeck.pause();
+                    nextDeck.currentTime = 0;
+                    activeDeck.volume = userVolume;
+                    resetDeckDJState(activeDeck);
+                    resetDeckDJState(nextDeck);
+                }
             }
         };
 
         document.addEventListener('mouseup', endDrag);
         document.addEventListener('touchend', endDrag);
 
-        // 🔥 Throttle для mousemove при звичайному наведенні на Timeline 🔥
         let isProgressTooltipUpdating = false;
 
         progressArea.addEventListener('mousemove', (e) => {
@@ -1180,12 +1214,14 @@
                 if (progressArea.matches(':hover')) {
                     e.preventDefault();
                     if (activeDeck.duration) activeDeck.currentTime = Math.min(activeDeck.duration, activeDeck.currentTime + 5);
+                    if (isAutomixing) { isAutomixing = false; nextDeck.pause(); activeDeck.volume = userVolume; resetDeckDJState(activeDeck); resetDeckDJState(nextDeck); }
                 } else { if (!e.repeat) manualSwitch('next'); }
             }
             if (e.code === 'ArrowLeft') { 
                 if (progressArea.matches(':hover')) {
                     e.preventDefault();
                     if (activeDeck.duration) activeDeck.currentTime = Math.max(0, activeDeck.currentTime - 5);
+                    if (isAutomixing) { isAutomixing = false; nextDeck.pause(); activeDeck.volume = userVolume; resetDeckDJState(activeDeck); resetDeckDJState(nextDeck); }
                 } else { if (!e.repeat) manualSwitch('prev'); }
             }
         });
