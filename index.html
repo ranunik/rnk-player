@@ -240,7 +240,7 @@
         .volume-wrapper:hover .volume-popup, .volume-wrapper:focus-within .volume-popup { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(5px); }
         .volume-wrapper.force-hide .volume-popup { opacity: 0 !important; visibility: hidden !important; transform: translateX(-50%) translateY(0) !important; }
 
-        .volume-slider { writing-mode: vertical-lr; direction: rtl; width: 4px; height: 70px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; cursor: pointer; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
+        .volume-slider { -webkit-appearance: slider-vertical; appearance: slider-vertical; width: 4px; height: 70px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; cursor: pointer; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
         .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.6); }
 
         .playback-controls { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; width: 100%; position: relative; height: 64px; }
@@ -289,7 +289,7 @@
     <div class="island-content" id="island-content">
         <div class="island-info-group">
             <div class="island-cover-wrapper skeleton" id="cover-wrapper">
-                <img src="" class="island-cover" id="island-cover" alt="Обкладинка альбому">
+                <img src="" class="island-cover" id="island-cover" alt="Обкладинка альбому" crossorigin="anonymous">
             </div>
             <div class="island-visualizer paused" id="island-visualizer" aria-hidden="true">
                 <div class="visualizer-bar"></div><div class="visualizer-bar"></div>
@@ -365,6 +365,7 @@
 
         const defaultCover = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjI1NiIgZmlsbD0iIzExMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjE4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjIyIiBzdHJva2Utd2lkdGg9IjEwIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxMjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzIyMiIgc3Ryb2tlLXdpZHRoPSIxMCIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjgwIiBmaWxsPSIjRkY1NzIyIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMCIgZmlsbD0iIzExMSIvPjxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIHI9IjgiIGZpbGw9IiNGRkYiLz48L3N2Zz4=";
 
+        // 🔥 ШЛЯХИ ТЕПЕР ЛОКАЛЬНІ (з папок на GitHub) 🔥
         const playlist = [
             { title: "ВАВИЛОН", artist: "YARMAK", audio: "./audio/01.mp3", video: "", cover: "./covers/01.jpg" },
             { title: "Не мовчи", artist: "БЕЗ ОБМЕЖЕНЬ", audio: "./audio/02.mp3", video: "", cover: "./covers/02.jpg" },
@@ -396,24 +397,11 @@
         let isShuffle = false;
         let isRepeat = false;
 
-        // 🛡 Смарт-генератор абсолютних шляхів для GitHub Pages
-        const getAbsoluteUrl = (url) => {
-            if (!url) return '';
-            if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url;
-            
-            let loc = window.location.href;
-            // Якщо адреса не закінчується на слеш або не містить файл (.html), додаємо слеш.
-            // Це рятує від 404 помилок на GitHub Pages при використанні відносних шляхів.
-            if (!loc.endsWith('/') && !loc.split('/').pop().includes('.')) {
-                loc += '/';
-            }
-            return new URL(url, loc).href;
-        };
-
         const deckA = document.createElement('audio'); 
         const deckB = document.createElement('audio'); 
+        deckA.crossOrigin = "anonymous";
+        deckB.crossOrigin = "anonymous";
         deckA.style.display = 'none'; deckB.style.display = 'none';
-        
         document.body.appendChild(deckA);
         document.body.appendChild(deckB);
         
@@ -429,7 +417,7 @@
         let isDraggingProgress = false;
         let dragPercent = 0;
 
-        // 🔥 Web Audio API
+        // 🔥 Web Audio API: Чесний аналізатор частот 🔥
         let audioCtx, analyser, dataArray;
         let audioInitialized = false;
         let baseTrackHue = 140; 
@@ -473,18 +461,6 @@
         const shuffleBtn = document.getElementById('shuffle-btn');
         const repeatBtn = document.getElementById('repeat-btn');
 
-        // 🚨 Детальне логування помилок аудіо
-        [deckA, deckB].forEach(deck => {
-            deck.addEventListener('error', () => {
-                if (deck.error) {
-                    console.error(`Media Error [Код ${deck.error.code}] для:`, deck.src);
-                    if (deck.error.code === 4) {
-                        console.warn("Файл повернув 404 або формат не підтримується! Переконайся, що шлях правильний і ти НЕ використовуєш Git LFS для MP3 файлів.");
-                    }
-                }
-            });
-        });
-
         let progressWidth = 0;
         function cacheDimensions() {
             if (!container.classList.contains('collapsed')) progressWidth = progressArea.clientWidth;
@@ -505,21 +481,7 @@
         }
         setInitialLayout();
 
-        // 🛡 Універсальна захисна функція
-        const safePlay = (mediaEl) => {
-            if (!mediaEl || !mediaEl.src) return;
-            try {
-                const playPromise = mediaEl.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.warn("Відтворення заблоковано браузером:", error);
-                    });
-                }
-            } catch (err) {
-                console.warn("Синхронна помилка відтворення:", err);
-            }
-        };
-
+        // Ініціалізація аудіоконтексту ПІСЛЯ кліку користувача (вимога браузерів)
         function initRealAudioVisualizer() {
             if (audioInitialized) return;
             try {
@@ -543,12 +505,14 @@
             }
         }
 
+        // 🔥 Чесний аналізатор + DMX логіка з боковим світінням 🔥
         function updateBeatGlow() {
             requestAnimationFrame(updateBeatGlow);
 
             const trackData = playlist[currentTrackIndex];
             const hasVideo = trackData && trackData.video !== "";
 
+            // Вимикаємо при згортанні або якщо є відео
             if (!isPlaying || container.classList.contains('collapsed') || hasVideo || !audioCtx) {
                 smoothedIntensity = smoothedIntensity * 0.85; 
                 if (smoothedIntensity < 0.01) {
@@ -557,24 +521,34 @@
                     return;
                 }
             } else {
+                // Читаємо реальні дані з треку
                 analyser.getByteFrequencyData(dataArray);
 
+                // 1. Аналіз Басу (Kick/Bass) - низькі частоти для сили пульсації
                 let bassSum = 0;
                 for (let i = 1; i < 6; i++) bassSum += dataArray[i];
                 let bassAvg = (bassSum / 5) / 255;
 
+                // 2. Аналіз Середніх частот (Vocals/Mids) - для швидкості переливання кольору
                 let midSum = 0;
                 for (let i = 20; i < 80; i++) midSum += dataArray[i];
                 let midAvg = (midSum / 60) / 255;
 
+                // Експонента: щоб легкий бас ігнорувався, а глибокий удар "спалахував"
                 let kick = Math.pow(bassAvg, 2.5);
+
+                // Інтенсивність НЕ залежить від userVolume
                 let intensity = kick * 1.5;
                 if (intensity > 1.0) intensity = 1.0;
 
+                // Згладжування (Lerp) для ефекту плавного згасання LED лампи
                 smoothedIntensity = smoothedIntensity * 0.6 + intensity * 0.4;
+                
+                // Колір переливається швидше під час вокалу/соло
                 currentHue = (currentHue + 0.4 + (midAvg * 3.0)) % 360;
             }
 
+            // Колірна палітра відштовхується від базового кольору обкладинки
             let hue1 = Math.floor(currentHue);
             let hue2 = Math.floor((currentHue + 45) % 360);
             let hue3 = Math.floor((currentHue + 90) % 360);
@@ -583,6 +557,7 @@
             const alpha2 = (smoothedIntensity * 0.5).toFixed(2);
             const alpha3 = (smoothedIntensity * 0.2).toFixed(2);
 
+            // 🔥 Світіння суворо ЛИШЕ з правого та лівого боку (від'ємний spread) 🔥
             const shadow = `
                 -${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
                  ${15 + smoothedIntensity * 25}px 0 ${30 + smoothedIntensity * 25}px -10px hsla(${hue1}, 100%, 60%, ${alpha1}),
@@ -716,22 +691,16 @@
 
             let proxyUrl = coverUrl;
             if (!coverUrl.startsWith('data:') && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('./')) {
-                proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(getAbsoluteUrl(coverUrl))}&w=150&output=webp`;
-                islandCover.crossOrigin = "anonymous";
-            } else {
-                islandCover.removeAttribute('crossOrigin');
+                proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(coverUrl)}&w=150&output=webp`;
             }
             
+            islandCover.crossOrigin = "anonymous";
             islandCover.src = proxyUrl; 
 
             if (!playlist[currentTrackIndex].video) {
                 bgVideo.style.display = 'none';
                 bgPoster.style.display = 'block';
-                bgPoster.style.backgroundImage = `url(${getAbsoluteUrl(coverUrl)})`; 
-                
-                bgVideo.pause();
-                bgVideo.removeAttribute('src');
-                bgVideo.load(); 
+                bgPoster.style.backgroundImage = `url(${coverUrl})`; 
             } else {
                 bgVideo.style.display = 'block';
                 bgPoster.style.display = 'none';
@@ -741,8 +710,8 @@
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: title, artist: artist, album: 'RNK-SYNC',
                     artwork: [
-                        { src: directCoverLink ? getAbsoluteUrl(directCoverLink) : getAbsoluteUrl(coverUrl), sizes: '96x96', type: 'image/jpeg' },
-                        { src: directCoverLink ? getAbsoluteUrl(directCoverLink) : getAbsoluteUrl(coverUrl), sizes: '512x512', type: 'image/jpeg' }
+                        { src: directCoverLink || coverUrl, sizes: '96x96', type: 'image/jpeg' },
+                        { src: directCoverLink || coverUrl, sizes: '512x512', type: 'image/jpeg' }
                     ]
                 });
             }
@@ -752,11 +721,8 @@
             updateUI(track.title, track.artist, track.cover, track.cover);
             
             if(track.audio.startsWith('data:') || track.audio.startsWith('blob:')) return;
-            if (window.location.protocol === 'file:') return;
 
-            const absoluteAudioUrl = getAbsoluteUrl(track.audio);
-
-            jsmediatags.read(absoluteAudioUrl, {
+            jsmediatags.read(track.audio, {
                 onSuccess: function(tag) {
                     const tags = tag.tags;
                     if (tags.picture) {
@@ -779,42 +745,34 @@
 
         function loadToDeck(deck, index, autoPlay = false) {
             const track = playlist[index];
-            deck.src = getAbsoluteUrl(track.audio);
+            deck.src = track.audio;
             deck.load();
             
             if (deck === activeDeck) {
                 readMetadata(track);
                 if (track.video) {
-                    bgVideo.src = getAbsoluteUrl(track.video);
-                    bgVideo.load();
-                    if (autoPlay) {
-                        safePlay(bgVideo);
-                    }
+                    bgVideo.src = track.video;
+                    bgVideo.play().catch(() => {});
                 }
             }
 
             if (autoPlay) { 
                 deck.volume = userVolume;
-                safePlay(deck);
+                deck.play(); 
             }
         }
 
         function togglePlay() {
             initRealAudioVisualizer(); 
-            if (audioCtx && audioCtx.state === 'suspended') {
-                audioCtx.resume().catch(() => {});
-            }
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 
             if (isPlaying) { 
                 haptics.pause(); 
                 activeDeck.pause(); 
-                if(playlist[currentTrackIndex].video) bgVideo.pause();
             } else { 
                 haptics.play(); 
-                safePlay(activeDeck); 
-                if(playlist[currentTrackIndex].video) {
-                    safePlay(bgVideo);
-                }
+                activeDeck.play(); 
+                if(playlist[currentTrackIndex].video) bgVideo.play(); 
             }
         }
 
@@ -836,52 +794,42 @@
             loadToDeck(nextDeck, nextIndex, false);
             
             nextDeck.volume = 0;
-            
-            try {
-                const playPromise = nextDeck.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        const startTime = Date.now();
-                        const durationMs = CROSSFADE_DURATION * 1000;
+            nextDeck.play().then(() => {
+                const startTime = Date.now();
+                const durationMs = CROSSFADE_DURATION * 1000;
 
-                        function mixStep() {
-                            let elapsed = Date.now() - startTime;
-                            let t = elapsed / durationMs;
-                            
-                            if (t >= 1) {
-                                activeDeck.pause();
-                                activeDeck.currentTime = 0;
-                                
-                                const tempDeck = activeDeck; 
-                                activeDeck = nextDeck; 
-                                nextDeck = tempDeck;
-                                
-                                activeDeck.volume = userVolume;
-                                nextDeck.volume = 0;
-                                
-                                currentTrackIndex = nextIndex; 
-                                isAutomixing = false;
-                            } else {
-                                activeDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
-                                nextDeck.volume = Math.cos((1.0 - t) * 0.5 * Math.PI) * userVolume;
-                                
-                                if (document.hidden) setTimeout(mixStep, 50); 
-                                else requestAnimationFrame(mixStep);
-                            }
-                        }
+                function mixStep() {
+                    let elapsed = Date.now() - startTime;
+                    let t = elapsed / durationMs;
+                    
+                    if (t >= 1) {
+                        activeDeck.pause();
+                        activeDeck.currentTime = 0;
+                        
+                        const tempDeck = activeDeck; 
+                        activeDeck = nextDeck; 
+                        nextDeck = tempDeck;
+                        
+                        activeDeck.volume = userVolume;
+                        nextDeck.volume = 0;
+                        
+                        currentTrackIndex = nextIndex; 
+                        isAutomixing = false;
+                    } else {
+                        activeDeck.volume = Math.cos(t * 0.5 * Math.PI) * userVolume;
+                        nextDeck.volume = Math.cos((1.0 - t) * 0.5 * Math.PI) * userVolume;
                         
                         if (document.hidden) setTimeout(mixStep, 50); 
                         else requestAnimationFrame(mixStep);
-                        
-                    }).catch(e => {
-                        isAutomixing = false;
-                        console.warn("Automix transition blocked:", e);
-                    });
+                    }
                 }
-            } catch (err) {
+                
+                if (document.hidden) setTimeout(mixStep, 50); 
+                else requestAnimationFrame(mixStep);
+                
+            }).catch(e => {
                 isAutomixing = false;
-                console.warn("Automix sync error:", err);
-            }
+            });
         }
 
         function manualSwitch(direction) {
@@ -952,12 +900,8 @@
 
             deck.addEventListener('ended', () => {
                 if (deck === activeDeck) {
-                    if (isRepeat) { 
-                        activeDeck.currentTime = 0; 
-                        safePlay(activeDeck);
-                    } else { 
-                        manualSwitch('next'); 
-                    }
+                    if (isRepeat) { activeDeck.currentTime = 0; activeDeck.play(); }
+                    else { manualSwitch('next'); }
                 }
             });
 
