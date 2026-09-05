@@ -79,6 +79,15 @@
         .player-container.is-mobile.collapsed { width: max-content; min-width: 120px; height: 44px; border-radius: 22px; cursor: pointer; }
         .player-container.is-mobile.expanded { width: 159px; height: 291px; border-radius: 24px; cursor: default; }
 
+        /* ПРИМУСОВА ЧИСТА ТІНЬ ДЛЯ РОЗГОРНУТОГО СТАНУ (Щоб прибрати брудні кольорові плями) */
+        .player-container.expanded {
+            box-shadow: 
+                0 40px 80px rgba(0,0,0,0.85), 
+                0 0 0 1px rgba(255,255,255,0.15), 
+                inset 0 1px 1.5px rgba(255,255,255,0.4), 
+                inset 0 -1px 1px rgba(255,255,255,0.05) !important;
+        }
+
         .player-container.collapsed:focus-visible { outline: 2px solid var(--viz-color); outline-offset: 4px; }
 
         /* 🔥 ФОНИ РОЗГОРНУТОГО ПЛЕЄРА 🔥 */
@@ -110,7 +119,7 @@
 
         .gradient-overlay { 
             position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; z-index: 2; 
-            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0) 100%); 
+            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%); 
             pointer-events: none; transition: opacity 0.4s, visibility 0.4s; 
         }
         
@@ -126,7 +135,7 @@
         .island-cover-wrapper {
             width: 38px; height: 38px; border-radius: 50%;
             position: relative; overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.6); background: #111; flex-shrink: 0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.8); background: #111; flex-shrink: 0;
             transform: translateZ(0);
         }
         .is-mobile .island-cover-wrapper { width: 32px; height: 32px; margin-left: 2px; }
@@ -142,7 +151,6 @@
 
         .island-visualizer { 
             display: flex; gap: 2.5px; align-items: center; justify-content: center; height: 16px; margin: 0 4px;
-            contain: content; 
         }
         
         .is-mobile .island-visualizer { display: flex !important; margin-right: auto; }
@@ -150,7 +158,7 @@
         .visualizer-bar { 
             width: 3px; height: 14px; border-radius: 1.5px; background-color: var(--viz-color); 
             transform-origin: center; will-change: transform; transform: scaleY(0.2);
-            box-shadow: 0 0 8px var(--viz-color); transition: background-color 0.5s ease, box-shadow 0.5s ease;
+            box-shadow: 0 0 5px var(--viz-color); transition: background-color 0.5s ease, box-shadow 0.5s ease;
             backface-visibility: hidden;
         }
 
@@ -160,17 +168,17 @@
         .island-btn:focus-visible { box-shadow: 0 0 0 2px var(--viz-color); }
         .island-btn svg { width: 16px; height: 16px; fill: currentColor; }
         
-        .desktop-only-btn { width: 32px; height: 32px; }
+        .desktop-only-btn { width: 32px; height: 32px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
         .desktop-only-btn svg { width: 18px; height: 18px; }
         .is-mobile .desktop-only-btn { display: none !important; }
 
         .island-play-btn { 
             width: 38px; height: 38px; background: rgba(255,255,255,0.15); 
             backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); 
-            border: 1px solid rgba(255,255,255,0.25); box-shadow: 0 4px 10px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.3);
+            border: 1px solid rgba(255,255,255,0.25); box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.3);
         }
         .is-mobile .island-play-btn { width: 32px; height: 32px; }
-        .island-play-btn svg { width: 16px; height: 16px; position: absolute; }
+        .island-play-btn svg { width: 16px; height: 16px; position: absolute; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
         .desktop-mode .mobile-only-btn { display: none; }
         .is-mobile .mobile-only-btn { width: 30px; height: 30px; display: flex; }
 
@@ -182,17 +190,18 @@
         .collapse-btn { 
             position: absolute; top: 15px; right: 15px; z-index: 10; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); 
             color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; 
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.4);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.4);
             outline: none; transition: 0.2s;
         }
         .collapse-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
         .collapse-btn:focus-visible { box-shadow: 0 0 0 2px #fff; }
+        .collapse-btn svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
         
         .interactive-zone { cursor: default; width: 100%; }
 
         .track-header { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 5px; width: 100%; }
-        .track-title { font-size: clamp(20px, 5.5vw, 24px); font-weight: 700; color: #fff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 10px rgba(0,0,0,0.8); width: 100%; }
-        .track-artist { font-size: clamp(13px, 4vw, 15px); color: rgba(255,255,255,0.7); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 10px rgba(0,0,0,0.8); width: 100%; }
+        .track-title { font-size: clamp(20px, 5.5vw, 24px); font-weight: 700; color: #fff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 4px 15px rgba(0,0,0,0.7); width: 100%; }
+        .track-artist { font-size: clamp(13px, 4vw, 15px); color: rgba(255,255,255,0.8); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 3px 10px rgba(0,0,0,0.6); width: 100%; }
         
         .is-mobile .expanded-content { padding: 10px 8px 15px; gap: 6px; }
         .is-mobile .collapse-btn { width: 22px; height: 22px; top: 8px; right: 8px; }
@@ -203,15 +212,15 @@
         .is-mobile .track-artist { font-size: 10px; }
         
         .progress-area { width: 100%; display: flex; flex-direction: column; gap: 6px; cursor: pointer; position: relative; padding: 5px 0; touch-action: none; }
-        .progress-tooltip { position: absolute; top: -20px; left: 0; transform: translateX(-50%); background: rgba(20,20,20,0.8); backdrop-filter: blur(10px); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 6px; border-radius: 6px; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.2s ease, visibility 0.2s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.1); z-index: 20; white-space: nowrap; }
+        .progress-tooltip { position: absolute; top: -20px; left: 0; transform: translateX(-50%); background: rgba(20,20,20,0.85); backdrop-filter: blur(10px); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 6px; border-radius: 6px; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.2s ease, visibility 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.1); z-index: 20; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
         .progress-area:hover .progress-tooltip, .progress-area:active .progress-tooltip { opacity: 1; visibility: visible; }
         
         .progress-area.force-hide-tooltip .progress-tooltip { opacity: 0 !important; visibility: hidden !important; }
         
-        .progress-bar-bg { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.15); border-radius: 2.5px; position: relative; pointer-events: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
-        .progress-bar-fill { height: 100%; width: 0%; background: var(--viz-color); border-radius: 2.5px; transition: background-color 0.5s ease; position: relative; pointer-events: none; will-change: width; box-shadow: 0 0 10px var(--viz-color); }
+        .progress-bar-bg { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.2); border-radius: 2.5px; position: relative; pointer-events: none; box-shadow: inset 0 1px 3px rgba(0,0,0,0.6); }
+        .progress-bar-fill { height: 100%; width: 0%; background: var(--viz-color); border-radius: 2.5px; transition: background-color 0.5s ease; position: relative; pointer-events: none; will-change: width; box-shadow: 0 0 6px var(--viz-color); }
         .progress-area:hover .progress-bar-fill::after, .progress-area:active .progress-bar-fill::after { content: ''; position: absolute; right: -4px; top: -3.5px; width: 12px; height: 12px; background: #fff; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.6); pointer-events: none; }
-        .time-info { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,255,255,0.6); font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none;}
+        .time-info { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
         
         .is-mobile .progress-area { gap: 4px; padding: 2px 0; }
         .is-mobile .time-info { font-size: 9px; }
@@ -244,26 +253,26 @@
         .is-mobile .playback-controls { height: auto; margin-top: 5px; flex-direction: column; }
         .is-mobile .main-controls { position: relative; left: 0; transform: none; width: 100%; justify-content: space-between; gap: 2px; }
         
-        .control-btn { background: none; border: none; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center; opacity: 0.7; transition: 0.2s; padding: 5px; position: relative; outline: none;}
+        .control-btn { background: none; border: none; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center; opacity: 0.8; transition: 0.2s; padding: 5px; position: relative; outline: none;}
         .control-btn:hover, .control-btn:focus-visible { opacity: 1; transform: scale(1.1); }
-        .control-btn.active-green { color: var(--viz-color); opacity: 1; transition: color 0.5s ease; text-shadow: 0 0 10px var(--viz-color); }
+        .control-btn.active-green { color: var(--viz-color); opacity: 1; transition: color 0.5s ease; text-shadow: 0 0 15px var(--viz-color); }
         .control-btn.active-green::after { content: ''; position: absolute; bottom: -5px; width: 4px; height: 4px; background: var(--viz-color); border-radius: 50%; transition: background-color 0.5s ease; box-shadow: 0 0 6px var(--viz-color); }
         
-        .control-btn svg { width: clamp(20px, 6vw, 24px); height: clamp(20px, 6vw, 24px); fill: currentColor; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+        .control-btn svg { width: clamp(20px, 6vw, 24px); height: clamp(20px, 6vw, 24px); fill: currentColor; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7)); }
         
         .play-pause-btn { 
             width: clamp(54px, 15vw, 64px); height: clamp(54px, 15vw, 64px); border-radius: 50%; 
             background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(25px) saturate(200%); -webkit-backdrop-filter: blur(25px) saturate(200%);
             border: 1px solid rgba(255, 255, 255, 0.25); border-top: 1px solid rgba(255, 255, 255, 0.5); 
-            color: #fff; opacity: 1; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2); transition: 0.3s cubic-bezier(0.25, 1, 0.5, 1); 
+            color: #fff; opacity: 1; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.5), inset 0 2px 4px rgba(255, 255, 255, 0.2); transition: 0.3s cubic-bezier(0.25, 1, 0.5, 1); 
         }
-        .play-pause-btn:hover, .play-pause-btn:focus-visible { transform: scale(1.08); background: rgba(255, 255, 255, 0.25); box-shadow: 0 15px 35px rgba(0,0,0,0.5), inset 0 2px 6px rgba(255, 255, 255, 0.3); }
+        .play-pause-btn:hover, .play-pause-btn:focus-visible { transform: scale(1.08); background: rgba(255, 255, 255, 0.25); box-shadow: 0 12px 25px rgba(0,0,0,0.6), inset 0 2px 6px rgba(255, 255, 255, 0.3); }
         .play-pause-btn:focus-visible { outline: 2px solid var(--viz-color); outline-offset: 4px; }
-        .play-pause-btn svg { width: clamp(24px, 7vw, 30px); height: clamp(24px, 7vw, 30px); position: absolute; fill: #fff; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4)); }
+        .play-pause-btn svg { width: clamp(24px, 7vw, 30px); height: clamp(24px, 7vw, 30px); position: absolute; fill: #fff; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
 
         .is-mobile .control-btn { padding: 2px; }
         .is-mobile .control-btn svg { width: 16px; height: 16px; }
-        .is-mobile .play-pause-btn { width: 38px; height: 38px; box-shadow: 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.3); }
+        .is-mobile .play-pause-btn { width: 38px; height: 38px; box-shadow: 0 6px 15px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.3); }
         .is-mobile .play-pause-btn svg { width: 18px; height: 18px; }
         
         .is-mobile .volume-wrapper { display: none; }
@@ -428,7 +437,6 @@
         let isShadowCleared = false; 
         let lastShadowUpdateTime = 0; 
         
-        // 🔥 ПРАПОРЕЦЬ ДЛЯ БЛОКУВАННЯ ТА ДОПОМІЖНА ФУНКЦІЯ 🔥
         let isLayoutTransitioning = false;
 
         function setLayoutState(expand) {
@@ -443,7 +451,6 @@
                 container.setAttribute('aria-expanded', 'false');
             }
             
-            // Заморожуємо рендер на 500мс (точно як тривалість transition у CSS)
             setTimeout(() => {
                 isLayoutTransitioning = false;
                 if (expand) cacheDimensions();
@@ -635,8 +642,6 @@
                 analyser.getByteFrequencyData(dataArray);
             }
 
-            // 🔥 БЛОКУВАННЯ ОБЧИСЛЕНЬ ТА DOM ЗАПИСІВ ПІД ЧАС АНІМАЦІЇ 🔥
-            // Це повністю звільняє GPU для плавного згортання/розгортання
             if (isLayoutTransitioning) {
                 requestAnimationFrame(updateAudioVisuals);
                 return;
@@ -728,6 +733,7 @@
                 }
             }
 
+            // 🔥 ОНОВЛЕНА, ІДЕАЛЬНО ЧИСТА ТІНЬ ОСТРІВЦЯ 🔥
             function applyShadow() {
                 if (smoothedIntensity < 0.01) {
                     if (!isShadowCleared) {
@@ -740,41 +746,24 @@
                 isShadowCleared = false;
                 
                 let hue1 = Math.floor(currentHue); 
-                let hue2 = Math.floor((baseTrackHue + 35) % 360); 
-                let hue3 = Math.floor((baseTrackHue + 180) % 360); 
+                let hue2 = Math.floor((baseTrackHue + 40) % 360); 
 
-                let sat = Math.floor(Math.min(100, 60 + smoothedIntensity * 40)); 
-                let lit = Math.floor(Math.min(60, 40 + smoothedIntensity * 20));  
+                let sat = 85; 
+                let lit = Math.floor(40 + smoothedIntensity * 15);  
 
-                const alpha1 = (smoothedIntensity * 0.85).toFixed(2);
-                const alpha2 = (smoothedIntensity * 0.55).toFixed(2);
-                const alpha3 = (smoothedIntensity * 0.35).toFixed(2);
-                const alpha4 = (smoothedIntensity * 0.5).toFixed(2);
+                const alpha1 = (smoothedIntensity * 0.4).toFixed(2);
+                const alpha2 = (smoothedIntensity * 0.2).toFixed(2);
 
-                const s1X = Math.round(15 + smoothedIntensity * 20);
-                const s1B = Math.round(30 + smoothedIntensity * 25);
+                const spreadX = Math.round(10 + smoothedIntensity * 15);
+                const blur1 = Math.round(15 + smoothedIntensity * 15);
+                const blur2 = Math.round(30 + smoothedIntensity * 25);
                 
-                const s2X = Math.round(35 + smoothedIntensity * 35);
-                const s2B = Math.round(60 + smoothedIntensity * 40);
-                
-                const s3X = Math.round(55 + smoothedIntensity * 45);
-                const s3B = Math.round(90 + smoothedIntensity * 50);
-                
-                const sInX = Math.round(15 + smoothedIntensity * 15);
-                const sInB = Math.round(25 + smoothedIntensity * 15);
-
+                // Світло падає дуже чисто і плавно по боках
                 const shadow = `
-                    -${s1X}px 0 ${s1B}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
-                     ${s1X}px 0 ${s1B}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
-                     
-                    -${s2X}px 0 ${s2B}px -15px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2}),
-                     ${s2X}px 0 ${s2B}px -15px hsla(${hue3}, 90%, 55%, ${alpha2}),
-                     
-                    -${s3X}px 0 ${s3B}px -20px hsla(${hue2}, 80%, 45%, ${alpha3}),
-                     ${s3X}px 0 ${s3B}px -20px hsla(${hue3}, 80%, 45%, ${alpha3}),
-                     
-                    inset -${sInX}px 0 ${sInB}px -10px hsla(${hue1}, 100%, 60%, ${alpha4}),
-                    inset  ${sInX}px 0 ${sInB}px -10px hsla(${hue1}, 100%, 60%, ${alpha4})
+                    -${spreadX}px 5px ${blur1}px -5px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
+                     ${spreadX}px 5px ${blur1}px -5px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha1}),
+                    -${spreadX + 15}px 10px ${blur2}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha2}),
+                     ${spreadX + 15}px 10px ${blur2}px -10px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2})
                 `;
                 container.style.setProperty('--dynamic-shadow', shadow);
             }
