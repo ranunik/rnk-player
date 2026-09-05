@@ -74,7 +74,7 @@
         }
 
         .player-container.desktop-mode.expanded { width: 100%; max-width: 320px; height: 520px; border-radius: 28px; cursor: default; }
-        .player-container.desktop-mode.collapsed { width: 220px; height: 55px; border-radius: 30px; cursor: pointer; }
+        .player-container.desktop-mode.collapsed { width: 250px; height: 55px; border-radius: 30px; cursor: pointer; }
         
         .player-container.is-mobile.collapsed { width: max-content; min-width: 120px; height: 44px; border-radius: 22px; cursor: pointer; }
         .player-container.is-mobile.expanded { width: 159px; height: 291px; border-radius: 24px; cursor: default; }
@@ -154,12 +154,16 @@
             backface-visibility: hidden;
         }
 
-        .island-controls { display: flex; align-items: center; gap: 2px; padding-right: 4px; }
+        .island-controls { display: flex; align-items: center; gap: 6px; padding-right: 4px; }
         .island-btn { background: none; border: none; color: #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; border-radius: 50%; transition: 0.2s; outline: none; }
         .island-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
         .island-btn:focus-visible { box-shadow: 0 0 0 2px var(--viz-color); }
         .island-btn svg { width: 16px; height: 16px; fill: currentColor; }
         
+        .desktop-only-btn { width: 32px; height: 32px; }
+        .desktop-only-btn svg { width: 18px; height: 18px; }
+        .is-mobile .desktop-only-btn { display: none !important; }
+
         .island-play-btn { 
             width: 38px; height: 38px; background: rgba(255,255,255,0.15); 
             backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); 
@@ -289,9 +293,15 @@
         </div>
         
         <div class="island-controls">
+            <button class="island-btn desktop-only-btn" id="island-prev-btn" aria-label="Попередній трек">
+                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+            </button>
             <button class="island-btn island-play-btn" id="island-play-btn" aria-label="Грати/Пауза">
                 <svg id="island-play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 <svg id="island-pause-icon" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            </button>
+            <button class="island-btn desktop-only-btn" id="island-next-btn" aria-label="Наступний трек">
+                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
         </div>
     </div>
@@ -460,6 +470,8 @@
         
         const mainPlayBtn = document.getElementById('main-play-btn');
         const islandPlayBtn = document.getElementById('island-play-btn');
+        const islandPrevBtn = document.getElementById('island-prev-btn');
+        const islandNextBtn = document.getElementById('island-next-btn');
         const mainPlayIcon = document.getElementById('main-play-icon');
         const mainPauseIcon = document.getElementById('main-pause-icon');
         const islandPlayIcon = document.getElementById('island-play-icon');
@@ -822,7 +834,6 @@
 
         islandContent.addEventListener('mousedown', (e) => {
             if (!container.classList.contains('collapsed')) return;
-            // Не починаємо свайп, якщо натиснули на елемент керування
             if (e.target.closest('.island-btn')) return; 
             
             islandMouseStartX = e.clientX;
@@ -834,7 +845,6 @@
             if (!container.classList.contains('collapsed') || !isIslandMouseDown) return;
             islandMouseEndX = e.clientX;
             
-            // Якщо миша зрушила більше ніж на 15 пікселів - позначаємо як свайп
             if (Math.abs(islandMouseEndX - islandMouseStartX) > 15) {
                 isIslandSwiping = true; 
             }
@@ -857,7 +867,6 @@
                 }
             }
             
-            // Скидаємо прапорець із затримкою, щоб відхилити розгортання в обробнику click
             setTimeout(() => { isIslandSwiping = false; }, 50);
         };
 
@@ -1418,6 +1427,8 @@
 
         mainPlayBtn.addEventListener('click', togglePlay);
         islandPlayBtn.addEventListener('click', togglePlay);
+        if (islandPrevBtn) islandPrevBtn.addEventListener('click', () => manualSwitch('prev'));
+        if (islandNextBtn) islandNextBtn.addEventListener('click', () => manualSwitch('next'));
         document.getElementById('next-btn').addEventListener('click', () => manualSwitch('next'));
         document.getElementById('prev-btn').addEventListener('click', () => manualSwitch('prev'));
 
