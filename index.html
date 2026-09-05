@@ -79,13 +79,14 @@
         .player-container.is-mobile.collapsed { width: max-content; min-width: 120px; height: 44px; border-radius: 22px; cursor: pointer; }
         .player-container.is-mobile.expanded { width: 159px; height: 291px; border-radius: 24px; cursor: default; }
 
-        /* ПРИМУСОВА ЧИСТА ТІНЬ ДЛЯ РОЗГОРНУТОГО СТАНУ (Щоб прибрати брудні кольорові плями) */
+        /* ДОДАНО ЗМІННУ ДИНАМІЧНОЇ ТІНІ ДЛЯ РОЗГОРНУТОГО СТАНУ */
         .player-container.expanded {
             box-shadow: 
                 0 40px 80px rgba(0,0,0,0.85), 
                 0 0 0 1px rgba(255,255,255,0.15), 
                 inset 0 1px 1.5px rgba(255,255,255,0.4), 
-                inset 0 -1px 1px rgba(255,255,255,0.05) !important;
+                inset 0 -1px 1px rgba(255,255,255,0.05),
+                var(--dynamic-shadow) !important;
         }
 
         .player-container.collapsed:focus-visible { outline: 2px solid var(--viz-color); outline-offset: 4px; }
