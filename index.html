@@ -81,7 +81,6 @@
         .player-container.is-mobile.collapsed { width: max-content; min-width: 120px; height: 44px; border-radius: 22px; cursor: pointer; }
         .player-container.is-mobile.expanded { width: 159px; height: 291px; border-radius: 24px; cursor: default; }
 
-        /* ДОДАНО ЗМІННУ ДИНАМІЧНОЇ ТІНІ ДЛЯ РОЗГОРНУТОГО СТАНУ */
         .player-container.expanded {
             box-shadow: 
                 var(--dynamic-shadow),
@@ -781,7 +780,7 @@
                 }
             }
 
-            // 🔥 ОНОВЛЕНА, ІДЕАЛЬНО ЧИСТА ТІНЬ ОСТРІВЦЯ 🔥
+            // 🔥 ОНОВЛЕНА, ІДЕАЛЬНО ЧИСТА ТІНЬ ОСТРІВЦЯ (ЛИШЕ ПО БОКАХ) 🔥
             function applyShadow() {
                 if (smoothedIntensity < 0.01) {
                     if (!isShadowCleared) {
@@ -800,29 +799,38 @@
                 let sat = 85; 
                 let lit = Math.floor(40 + smoothedIntensity * 15);  
 
-                const alpha1 = (smoothedIntensity * 0.4).toFixed(2);
-                const alpha2 = (smoothedIntensity * 0.2).toFixed(2);
+                const alpha1 = (smoothedIntensity * 0.5).toFixed(2);
+                const alpha2 = (smoothedIntensity * 0.3).toFixed(2);
 
-                const spreadX = Math.round(10 + smoothedIntensity * 15);
-                const blur1 = Math.round(15 + smoothedIntensity * 15);
-                const blur2 = Math.round(30 + smoothedIntensity * 25);
+                // Щоб світло було ТІЛЬКИ по боках, Y-offset = 0.
+                // Негативний spread (стиснення) ховає світло зверху та знизу, 
+                // а великий X-offset витягує його за лівий/правий край.
+                const offsetX1 = Math.round(40 + smoothedIntensity * 30);
+                const blur1 = Math.round(40 + smoothedIntensity * 20);
+                const spread1 = -Math.round(25 + smoothedIntensity * 15);
+
+                const offsetX2 = Math.round(70 + smoothedIntensity * 40);
+                const blur2 = Math.round(60 + smoothedIntensity * 30);
+                const spread2 = -Math.round(35 + smoothedIntensity * 20);
                 
-                // Зовнішнє світло (винесено ПОВЕРХ чорної тіні в CSS)
+                // Зовнішнє світло
                 const shadow = `
-                    -${spreadX}px 5px ${blur1}px -5px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
-                     ${spreadX}px 5px ${blur1}px -5px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha1}),
-                    -${spreadX + 15}px 10px ${blur2}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha2}),
-                     ${spreadX + 15}px 10px ${blur2}px -10px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2})
+                    -${offsetX1}px 0 ${blur1}px ${spread1}px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
+                     ${offsetX1}px 0 ${blur1}px ${spread1}px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha1}),
+                    -${offsetX2}px 0 ${blur2}px ${spread2}px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha2}),
+                     ${offsetX2}px 0 ${blur2}px ${spread2}px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2})
                 `;
                 container.style.setProperty('--dynamic-shadow', shadow);
 
-                // Внутрішній відблиск (додано для об'ємного ефекту світла ПОВЕРХ плеєра)
-                const innerSpread = Math.round(5 + smoothedIntensity * 5);
-                const innerBlur = Math.round(20 + smoothedIntensity * 20);
-                const innerAlpha = (smoothedIntensity * 0.25).toFixed(2);
+                // Внутрішній відблиск (також лише по боках)
+                const innerOffsetX = Math.round(20 + smoothedIntensity * 15);
+                const innerBlur = Math.round(30 + smoothedIntensity * 20);
+                const innerSpread = -Math.round(15 + smoothedIntensity * 10);
+                const innerAlpha = (smoothedIntensity * 0.3).toFixed(2);
+                
                 const innerShadow = `
-                    inset ${innerSpread}px 0 ${innerBlur}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${innerAlpha}),
-                    inset -${innerSpread}px 0 ${innerBlur}px -10px hsla(${hue2}, ${sat}%, ${lit}%, ${innerAlpha})
+                    inset ${innerOffsetX}px 0 ${innerBlur}px ${innerSpread}px hsla(${hue1}, ${sat}%, ${lit}%, ${innerAlpha}),
+                    inset -${innerOffsetX}px 0 ${innerBlur}px ${innerSpread}px hsla(${hue2}, ${sat}%, ${lit}%, ${innerAlpha})
                 `;
                 container.style.setProperty('--dynamic-inner-shadow', innerShadow);
             }
