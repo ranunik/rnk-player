@@ -46,11 +46,11 @@
             overflow: hidden;
             
             box-shadow: 
+                var(--dynamic-shadow),
                 0 30px 60px rgba(0,0,0,0.6), 
                 0 0 0 1px rgba(255,255,255,0.15), 
                 inset 0 1px 1.5px rgba(255,255,255,0.4), 
-                inset 0 -1px 1px rgba(255,255,255,0.05),
-                var(--dynamic-shadow);
+                inset 0 -1px 1px rgba(255,255,255,0.05);
             
             transition: width 0.5s cubic-bezier(0.32, 0.72, 0, 1), 
                         height 0.5s cubic-bezier(0.32, 0.72, 0, 1), 
@@ -68,9 +68,11 @@
             inset: 0;
             border-radius: inherit;
             background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 35%, rgba(255,255,255,0.03) 100%);
+            box-shadow: var(--dynamic-inner-shadow, 0 0 0 transparent);
             z-index: 3;
             pointer-events: none;
             mix-blend-mode: screen;
+            transition: box-shadow 0.5s ease;
         }
 
         .player-container.desktop-mode.expanded { width: 100%; max-width: 320px; height: 520px; border-radius: 28px; cursor: default; }
@@ -82,11 +84,11 @@
         /* ДОДАНО ЗМІННУ ДИНАМІЧНОЇ ТІНІ ДЛЯ РОЗГОРНУТОГО СТАНУ */
         .player-container.expanded {
             box-shadow: 
+                var(--dynamic-shadow),
                 0 40px 80px rgba(0,0,0,0.85), 
                 0 0 0 1px rgba(255,255,255,0.15), 
                 inset 0 1px 1.5px rgba(255,255,255,0.4), 
-                inset 0 -1px 1px rgba(255,255,255,0.05),
-                var(--dynamic-shadow) !important;
+                inset 0 -1px 1px rgba(255,255,255,0.05) !important;
         }
 
         .player-container.collapsed:focus-visible { outline: 2px solid var(--viz-color); outline-offset: 4px; }
@@ -697,6 +699,7 @@
                 smoothedIntensity = 0;
                 if (!isShadowCleared) {
                     container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
+                    container.style.setProperty('--dynamic-inner-shadow', '0 0 0 transparent');
                     isShadowCleared = true;
                 }
                 for (let i = 0; i < 4; i++) {
@@ -783,6 +786,7 @@
                 if (smoothedIntensity < 0.01) {
                     if (!isShadowCleared) {
                         container.style.setProperty('--dynamic-shadow', '0 0 0 transparent');
+                        container.style.setProperty('--dynamic-inner-shadow', '0 0 0 transparent');
                         isShadowCleared = true;
                     }
                     return;
@@ -803,7 +807,7 @@
                 const blur1 = Math.round(15 + smoothedIntensity * 15);
                 const blur2 = Math.round(30 + smoothedIntensity * 25);
                 
-                // Світло падає дуже чисто і плавно по боках
+                // Зовнішнє світло (винесено ПОВЕРХ чорної тіні в CSS)
                 const shadow = `
                     -${spreadX}px 5px ${blur1}px -5px hsla(${hue1}, ${sat}%, ${lit}%, ${alpha1}),
                      ${spreadX}px 5px ${blur1}px -5px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha1}),
@@ -811,6 +815,16 @@
                      ${spreadX + 15}px 10px ${blur2}px -10px hsla(${hue2}, ${sat}%, ${lit}%, ${alpha2})
                 `;
                 container.style.setProperty('--dynamic-shadow', shadow);
+
+                // Внутрішній відблиск (додано для об'ємного ефекту світла ПОВЕРХ плеєра)
+                const innerSpread = Math.round(5 + smoothedIntensity * 5);
+                const innerBlur = Math.round(20 + smoothedIntensity * 20);
+                const innerAlpha = (smoothedIntensity * 0.25).toFixed(2);
+                const innerShadow = `
+                    inset ${innerSpread}px 0 ${innerBlur}px -10px hsla(${hue1}, ${sat}%, ${lit}%, ${innerAlpha}),
+                    inset -${innerSpread}px 0 ${innerBlur}px -10px hsla(${hue2}, ${sat}%, ${lit}%, ${innerAlpha})
+                `;
+                container.style.setProperty('--dynamic-inner-shadow', innerShadow);
             }
         }
 
