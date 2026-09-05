@@ -426,6 +426,7 @@
         let dragPercent = 0;
 
         let audioCtx, analyser, dataArray;
+        let masterCompressor, masterGain;
         let audioInitialized = false;
         let isVisualizerRunning = false;
         
@@ -436,6 +437,14 @@
         let lastAppliedBars = [0, 0, 0, 0]; 
         let isShadowCleared = false; 
         let lastShadowUpdateTime = 0; 
+
+        // --- Двигун "розумних" переходів: окремий, завжди активний "слух" для automix ---
+        // Працює щокадру під час відтворення незалежно від того, згорнутий плеєр чи
+        // розгорнутий, тож рішення про мікс завжди спираються на те, що насправді грає.
+        let automixIntensity = 0;      // EMA "удару" баса — та ж ідея, що й smoothedIntensity
+        let energyTrail = [];          // останні { t, v } семпли automixIntensity (вікно MIX_MEMORY_MS)
+        const MIX_MEMORY_MS = 6000;
+        let lastMixMode = null;        // не даємо однаковій текстурі переходу повторитись підряд
         
         let isLayoutTransitioning = false;
 
@@ -582,22 +591,49 @@
                 const sourceA = audioCtx.createMediaElementSource(deckA);
                 const sourceB = audioCtx.createMediaElementSource(deckB);
 
-                deckA.djFilter = audioCtx.createBiquadFilter();
-                deckA.djFilter.type = "lowshelf";
-                deckA.djFilter.frequency.value = 250; 
-                deckA.djFilter.gain.value = 0;
+                [[deckA, sourceA], [deckB, sourceB]].forEach(([deck, source]) => {
+                    deck.djFilter = audioCtx.createBiquadFilter();
+                    deck.djFilter.type = "lowshelf";
+                    deck.djFilter.frequency.value = 250;
+                    deck.djFilter.gain.value = 0;
 
-                deckB.djFilter = audioCtx.createBiquadFilter();
-                deckB.djFilter.type = "lowshelf";
-                deckB.djFilter.frequency.value = 250;
-                deckB.djFilter.gain.value = 0;
+                    // Незалежний тримінг-гейн для кожної деки, окремо від element.volume — саме
+                    // це дозволяє непомітно вирівнювати гучність двох по-різному змайстрованих
+                    // треків одне відносно одного просто перед/під час накладання.
+                    deck.trimGain = audioCtx.createGain();
+                    deck.trimGain.gain.value = 1.0;
 
-                sourceA.connect(deckA.djFilter);
-                deckA.djFilter.connect(analyser);
+                    // Окрема "точка прослуховування" (не веде до виходу) виключно для вимірювання
+                    // реальної RMS-гучності цієї деки, незалежно від спільного аналізатора
+                    // візуалізатора.
+                    deck.loudnessAnalyser = audioCtx.createAnalyser();
+                    deck.loudnessAnalyser.fftSize = 1024;
+                    deck.loudnessAnalyser.smoothingTimeConstant = 0;
+                    deck._loudnessBuf = new Float32Array(deck.loudnessAnalyser.fftSize);
 
-                sourceB.connect(deckB.djFilter);
-                deckB.djFilter.connect(analyser);
-                analyser.connect(audioCtx.destination);
+                    source.connect(deck.djFilter);
+                    deck.djFilter.connect(deck.trimGain);
+                    deck.trimGain.connect(deck.loudnessAnalyser);
+                    deck.trimGain.connect(analyser);
+                });
+
+                // Майстер-шина: м'який компресор + стеля гучності, щоб два треки, що
+                // накладаються під час переходу, ніколи не звучали голосніше чи різкіше, ніж
+                // кожен окремо — саме цей єдиний вузол найбільше відрізняє "просто подвоєну
+                // гучність" від переходу, що звучить як зведений мікс.
+                masterCompressor = audioCtx.createDynamicsCompressor();
+                masterCompressor.threshold.value = -16;
+                masterCompressor.knee.value = 12;
+                masterCompressor.ratio.value = 2.5;
+                masterCompressor.attack.value = 0.015;
+                masterCompressor.release.value = 0.3;
+
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 1.0;
+
+                analyser.connect(masterCompressor);
+                masterCompressor.connect(masterGain);
+                masterGain.connect(audioCtx.destination);
                 
                 audioInitialized = true;
                 
@@ -617,6 +653,9 @@
                 deck.djFilter.frequency.value = 250;
                 deck.djFilter.Q.value = 1;
                 deck.djFilter.gain.value = 0;
+            }
+            if (audioCtx && deck.trimGain) {
+                deck.trimGain.gain.value = 1.0;
             }
             deck.playbackRate = 1.0;
         }
@@ -640,6 +679,11 @@
 
             if (isPlaying) {
                 analyser.getByteFrequencyData(dataArray);
+                // Завжди рахуємо реальну енергію треку під час відтворення — незалежно від
+                // того, згорнутий плеєр чи розгорнутий. Раніше рішення про мікс спирались на
+                // значення, яке "засинало" у згорнутому вигляді (найпоширеніший стан плеєра),
+                // тож фактично не відображало те, що насправді грає.
+                sampleTransitionEnergy();
             }
 
             if (isLayoutTransitioning) {
@@ -1057,33 +1101,131 @@
             isNextTrackPreloaded = true;
         }
 
+        // --- Двигун "розумних" переходів ---------------------------------------------------
+
+        function sampleTransitionEnergy() {
+            let bassSum = 0;
+            for (let i = 1; i < 6; i++) bassSum += dataArray[i];
+            const bassAvg = (bassSum / 5) / 255;
+
+            let kick = Math.pow(bassAvg, 2.5) * 1.5;
+            if (kick > 1.0) kick = 1.0;
+
+            automixIntensity = automixIntensity * 0.6 + kick * 0.4;
+
+            const now = performance.now();
+            energyTrail.push({ t: now, v: automixIntensity });
+            while (energyTrail.length && now - energyTrail[0].t > MIX_MEMORY_MS) energyTrail.shift();
+        }
+
+        // Порівнює останню ~1с енергії з останніми ~4с, щоб відрізнити справжній спад (кінець
+        // приспіву, брейкдаун, природна пауза) від звичайного тремтіння між ударами — це різниця
+        // між "дочекатись вдалого моменту" і "просто дивитись на таймер".
+        function getEnergyTrend() {
+            if (energyTrail.length < 4) return { level: automixIntensity, isLull: false, isBuilding: false };
+            const now = performance.now();
+            const avg = arr => arr.reduce((sum, s) => sum + s.v, 0) / arr.length;
+            const recent = energyTrail.filter(s => now - s.t <= 1000);
+            const wider = energyTrail.filter(s => now - s.t <= 4000);
+            const recentAvg = recent.length ? avg(recent) : automixIntensity;
+            const widerAvg = wider.length ? avg(wider) : automixIntensity;
+            return {
+                level: automixIntensity,
+                isLull: recentAvg < widerAvg * 0.65,
+                isBuilding: recentAvg > widerAvg * 1.35
+            };
+        }
+
+        function sampleDeckRms(deck) {
+            if (!deck.loudnessAnalyser) return 0;
+            deck.loudnessAnalyser.getFloatTimeDomainData(deck._loudnessBuf);
+            let sumSquares = 0;
+            for (let i = 0; i < deck._loudnessBuf.length; i++) sumSquares += deck._loudnessBuf[i] * deck._loudnessBuf[i];
+            return Math.sqrt(sumSquares / deck._loudnessBuf.length);
+        }
+
+        // Пропускає перші тихі кадри наступного треку (буває, коли у файл вшитий невеликий
+        // відступ тиші перед реальним звуком), щоб точка входу в мікс була першим справжнім
+        // звуком, а не мертвою тишею — той самий трюк, що й безшовне відтворення у великих
+        // стрімінгових сервісах.
+        function skipLeadingSilence(deck) {
+            return new Promise(resolve => {
+                if (!audioCtx || !deck.loudnessAnalyser) { resolve(); return; }
+                let checks = 0;
+                const maxChecks = 4;
+                const step = () => {
+                    checks++;
+                    const rms = sampleDeckRms(deck);
+                    if (rms < 0.004 && deck.currentTime < 1.2 && checks < maxChecks) {
+                        deck.currentTime += 0.25;
+                        requestAnimationFrame(step);
+                    } else {
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        // Вимірює наскільки одна дека гучніша за іншу прямо в момент початку накладання —
+        // узгоджена гучність, а не лише узгоджена позиція фейдера, ось що робить перехід
+        // цілісним, а не випадковим.
+        function measureLoudnessCompensation(outDeck, inDeck) {
+            const outRms = sampleDeckRms(outDeck);
+            const inRms = sampleDeckRms(inDeck);
+            if (outRms < 0.001 || inRms < 0.001) return 1.0;
+            return Math.max(0.6, Math.min(1.6, outRms / inRms));
+        }
+
         function triggerAutomix(crossfadeSec) {
             if (isAutomixing || isRepeat) return; 
             isAutomixing = true;
             
             const nextIndex = getNextIndex('next');
             loadToDeck(nextDeck, nextIndex, false);
-            
-            let mixMode = 'eq';
-            if (smoothedIntensity > 0.6) {
-                mixMode = Math.random() > 0.5 ? 'hpf_sweep' : 'vinyl_brake';
-            } else if (smoothedIntensity < 0.2) {
-                mixMode = Math.random() > 0.5 ? 'eq' : 'lpf_sweep';
-            } else {
-                const r = Math.random();
-                if (r < 0.4) mixMode = 'eq';
-                else if (r < 0.7) mixMode = 'hpf_sweep';
-                else mixMode = 'lpf_sweep';
-            }
 
-            const durationMs = mixMode === 'vinyl_brake' ? 2500 : crossfadeSec * 1000;
+            const trend = getEnergyTrend();
+            const intensity = automixIntensity;
+
+            // Зважений вибір текстури переходу замість монетки: чистий equal-power мікс завжди
+            // в грі, ефектніші прийоми отримують реальну вагу лише тоді, коли музика справді це
+            // підтримує, а та сама текстура ніколи не повторюється два рази поспіль.
+            const candidates = [];
+            const addCandidate = (mode, weight) => { if (weight > 0 && mode !== lastMixMode) candidates.push({ mode, weight }); };
+
+            addCandidate('eq', 3);
+            addCandidate('lpf_sweep', intensity < 0.35 ? 2.5 : 1);
+            addCandidate('hpf_sweep', intensity > 0.3 && !trend.isBuilding ? 2 : 0.4);
+            addCandidate('vinyl_brake', intensity > 0.55 && trend.isLull && !trend.isBuilding ? 2 : 0);
+
+            if (!candidates.length) candidates.push({ mode: 'eq', weight: 1 });
+
+            const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
+            let pick = Math.random() * totalWeight;
+            let mixMode = candidates[0].mode;
+            for (const c of candidates) {
+                if (pick < c.weight) { mixMode = c.mode; break; }
+                pick -= c.weight;
+            }
+            lastMixMode = mixMode;
+
+            const durationMs = mixMode === 'vinyl_brake' ? 2200 : crossfadeSec * 1000;
             
             nextDeck.volume = 0;
             nextDeck.play().then(() => {
                 if (!isAutomixing) return; 
+                return skipLeadingSilence(nextDeck);
+            }).then(() => {
+                if (!isAutomixing) return; 
 
                 const fadingOutDeck = activeDeck;
                 const fadingInDeck = nextDeck;
+
+                // Вирівнюємо гучність двох дек саме в момент, коли вони починають накладатись —
+                // щоб тихіше змастерований трек не відчувався як провал гучності поруч із гучним.
+                if (fadingInDeck.trimGain) {
+                    fadingInDeck.trimGain.gain.value = measureLoudnessCompensation(fadingOutDeck, fadingInDeck);
+                }
 
                 activeDeck = fadingInDeck;
                 nextDeck = fadingOutDeck; 
@@ -1156,7 +1298,7 @@
                 if (document.hidden) setTimeout(mixStep, 50); 
                 else requestAnimationFrame(mixStep);
                 
-            }).catch(e => {
+            }).catch(() => {
                 isAutomixing = false;
             });
         }
@@ -1236,16 +1378,23 @@
                 if (timeLeft <= 20) preloadNextTrack();
 
                 if (timeLeft <= 15 && !isAutomixing && isPlaying && !isRepeat && deck.duration > 20) {
+                    const trend = getEnergyTrend();
                     let shouldMixNow = false;
                     let plannedDuration = 6;
 
-                    if (smoothedIntensity < 0.15 && timeLeft <= 12) {
+                    if (trend.isLull) {
+                        // Справжній спад енергії — найкращий момент для переходу. Ловимо його
+                        // одразу, а не чекаємо, поки це змусить зробити таймер, і даємо трохи
+                        // більше часу на спокійніше, довше змішування.
+                        shouldMixNow = true;
+                        plannedDuration = Math.min(timeLeft, 8);
+                    } else if (automixIntensity < 0.15 && timeLeft <= 12) {
                         shouldMixNow = true;
                         plannedDuration = timeLeft;
-                    } else if (smoothedIntensity >= 0.15 && smoothedIntensity < 0.6 && timeLeft <= 7) {
+                    } else if (automixIntensity >= 0.15 && automixIntensity < 0.6 && timeLeft <= 7) {
                         shouldMixNow = true;
                         plannedDuration = timeLeft;
-                    } else if (smoothedIntensity >= 0.6 && timeLeft <= 4) {
+                    } else if (automixIntensity >= 0.6 && timeLeft <= 4) {
                         shouldMixNow = true;
                         plannedDuration = Math.min(timeLeft, 4); 
                     }
